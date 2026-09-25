@@ -28,7 +28,7 @@ Dependencies are managed with [uv](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync                              # creates .venv, installs deps + dev extras
-cp .env.example .env                 # fill in secrets, never commit .env
+cp .env.example hr_agent/.env               # fill in secrets, never commit .env
 ```
 
 ## Development
@@ -36,6 +36,6 @@ cp .env.example .env                 # fill in secrets, never commit .env
 ```bash
 uv run ruff check .                  # lint
 uv run pytest                        # unit tests (tests/unit)
-uv run pytest tests/integration     # integration tests (need .env)
+uv run pytest tests/integration     # integration tests (need hr_agent/.env)
 uv run adk eval hr_agent evals/      # eval gate
 ```

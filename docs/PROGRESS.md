@@ -7,8 +7,8 @@ unchecked step.
 ## Module 1 — Foundations and first ADK agent
 - [x] 1. Environment: uv venv, deps, Vertex AI or AI Studio choice, `hr_agent/.env`, budget alert
 - [x] 2. Mock data module (employees, PTO/sick hours, 2026 holidays)
-- [ ] 3. Tools: `get_pto_balance(employee_id)`, `list_holidays(year)`
-- [ ] 4. ADK agent (`root_agent`) + unit tests for tools
+- [x] 3. Tools: `get_pto_balance(employee_id)`, `list_holidays(year)`
+- [x] 4. ADK agent (`root_agent`) + unit tests for tools
 - [ ] 5. Run with `adk web` / `adk run`; test prompts; walk one trace
 - [ ] 6. Break-it experiments (vague docstring, removed rule, exception, double question)
 - [ ] 7. `scratch/react_from_scratch.py` — no-framework rebuild
@@ -75,6 +75,9 @@ unchecked step.
 
 ## Decisions
 
+- M1.3: Tools return `{"status": ...}` dicts, errors as data with actionable messages
+  (ID format, available years). IDs normalized (strip/upper). Tests live in `tests/unit/`;
+  integration tests in `tests/integration/`, on demand.
 - M1.1: Chose Vertex AI (ADC) over AI Studio API key — aligns with Agent Engine deploy
   path in Module 7. Model ID set via `MODEL_ID` in `.env`, currently `gemini-3.8-flash`
   (re-verify before Module 8 tier-routing work; Gemini 2.5 retires 2026-10-20).
@@ -91,3 +94,7 @@ unchecked step.
 ## Interview notes
 
 (Weak spots surfaced during interview-style Q&A go here, tagged by module/step.)
+
+- M1.3 (open): how to enforce "only yourself or your reports" on `get_pto_balance` without
+  trusting the model? Expected: identity from session/auth context injected server-side,
+  authorization check inside the tool/MCP layer, not in the prompt (Module 6).
