@@ -6,7 +6,7 @@ unchecked step.
 
 ## Module 1 — Foundations and first ADK agent
 - [x] 1. Environment: uv venv, deps, Vertex AI or AI Studio choice, `hr_agent/.env`, budget alert
-- [ ] 2. Mock data module (employees, PTO/sick hours, 2026 holidays)
+- [x] 2. Mock data module (employees, PTO/sick hours, 2026 holidays)
 - [ ] 3. Tools: `get_pto_balance(employee_id)`, `list_holidays(year)`
 - [ ] 4. ADK agent (`root_agent`) + unit tests for tools
 - [ ] 5. Run with `adk web` / `adk run`; test prompts; walk one trace
