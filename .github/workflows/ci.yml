@@ -36,4 +36,11 @@ jobs:
         with:
           python-version: "3.14"
       - run: uv sync
-      - run: uv run adk eval hr_agent evals/
+      # No eval sets or agent until Module 1 step 4 / Module 5; enforce once evalsets exist.
+      - name: Run eval gate
+        run: |
+          if ls evals/*.evalset.json >/dev/null 2>&1; then
+            uv run adk eval hr_agent evals/*.evalset.json
+          else
+            echo "No eval sets yet; skipping."
+          fi
