@@ -16,7 +16,7 @@ hr-ops-agent/
 ├── docs/                # one-pagers, architecture doc, strategy memo
 ├── scratch/             # react_from_scratch.py and experiments
 ├── .github/workflows/   # CI: lint, tests, eval gate
-├── CLAUDE.md            # project conventions for Claude Code
+├── AGENTS.md            # project conventions for AI coding agents
 ├── pyproject.toml
 ├── .gitignore           # must include .env
 └── README.md
