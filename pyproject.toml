@@ -32,5 +32,6 @@ target-version = "py314"
 select = ["E", "F", "I", "UP"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/unit"]
+markers = ["integration: crosses a real boundary (MCP server, model, GCP)"]
 asyncio_mode = "auto"

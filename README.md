@@ -11,7 +11,7 @@ hr-ops-agent/
 ├── hr_agent/            # ADK agent package (Module 1, grows into multi-agent in M3)
 ├── mcp_server/          # HCM tools as an MCP server (Module 2)
 ├── evals/               # eval sets + configs for adk eval (Module 5)
-├── tests/               # unit tests for tools and guardrails
+├── tests/               # unit/ (hermetic, in CI) and integration/ (real boundaries, on demand)
 ├── deploy/              # agent_engine/, cloud_run/, gke/ (Module 7)
 ├── docs/                # one-pagers, architecture doc, strategy memo
 ├── scratch/             # react_from_scratch.py and experiments
@@ -35,6 +35,7 @@ cp .env.example .env                 # fill in secrets, never commit .env
 
 ```bash
 uv run ruff check .                  # lint
-uv run pytest                        # unit tests
+uv run pytest                        # unit tests (tests/unit)
+uv run pytest tests/integration     # integration tests (need .env)
 uv run adk eval hr_agent evals/      # eval gate
 ```

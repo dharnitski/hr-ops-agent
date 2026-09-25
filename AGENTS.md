@@ -12,7 +12,12 @@ An HR operations agent built on Google ADK. HCM tools are exposed via an MCP ser
   to it over MCP, never by direct import.
 - `evals/` — `adk eval` sets/configs (Module 5). Each set runs standalone and is wired
   into the CI eval gate.
-- `tests/` — unit tests for tools and guardrails, mirroring `hr_agent/`/`mcp_server/`.
+- `tests/unit/` — fast, hermetic tests for tools and guardrails, mirroring
+  `hr_agent/`/`mcp_server/` (e.g. `tests/unit/hr_agent/test_tools.py`). No network, model
+  calls, credentials, or subprocesses; mock or fake anything external.
+- `tests/integration/` — tests that cross a real boundary: a running MCP server, the ADK
+  agent wiring, or live model/GCP calls. May need `.env`/credentials; slower and
+  non-deterministic. Mark model-calling tests `@pytest.mark.integration`.
 - `deploy/` — `agent_engine/`, `cloud_run/`, `gke/` configs (Module 7).
 - `docs/` — one-pagers, architecture doc, strategy memo.
 - `scratch/` — throwaway experiments (e.g. `react_from_scratch.py`); not imported by
@@ -22,9 +27,11 @@ An HR operations agent built on Google ADK. HCM tools are exposed via an MCP ser
 - Python >= 3.14 via `uv` (`uv sync`, `uv add`, `uv run ...`) — no bare `pip`/`venv`.
 - Lint with `ruff`, format with `ruff format`.
 - Secrets in `.env` (gitignored); document required vars in `.env.example`.
-- New HCM tools need: handler in `mcp_server/`, unit test in `tests/`, and an eval case
-  in `evals/` if behavior changes.
-- CI runs lint, unit tests, and the eval gate on every PR.
+- New HCM tools need: handler in `mcp_server/`, unit test in `tests/unit/`, an integration
+  test in `tests/integration/` if it crosses the MCP boundary, and an eval case in `evals/`
+  if behavior changes.
+- CI runs lint, unit tests (`tests/unit/`), and the eval gate on every PR. Integration tests
+  run on demand (`uv run pytest tests/integration`), not in CI.
 - Stay AI-vendor-agnostic: never name a specific AI vendor/tool/model in code, docs,
   commits, or PRs — no attribution/co-author/"Generated with" lines for AI tools.
 - Be concise: docs, comments, and messages carry only what changes a decision or
