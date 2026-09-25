@@ -20,7 +20,9 @@ An HR operations agent built on Google ADK. HCM tools are exposed via an MCP ser
   production code; not covered by CI.
 
 ## Conventions
-- Python >= 3.14. Lint with `ruff`, format with `ruff format`.
+- Python >= 3.14, dependencies managed with `uv` (`uv sync`, `uv add`, `uv run ...`).
+  Do not use bare `pip`/`venv`.
+- Lint with `ruff`, format with `ruff format`.
 - Secrets go in `.env` (never committed — see `.gitignore`). Use `.env.example` for
   documenting required variables.
 - New HCM tools: add the handler in `mcp_server/`, add a matching unit test in `tests/`,

@@ -24,17 +24,17 @@ hr-ops-agent/
 
 ## Getting started
 
+Dependencies are managed with [uv](https://docs.astral.sh/uv/).
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.example .env  # fill in secrets, never commit .env
+uv sync                              # creates .venv, installs deps + dev extras
+cp .env.example .env                 # fill in secrets, never commit .env
 ```
 
 ## Development
 
 ```bash
-ruff check .        # lint
-pytest               # unit tests
-adk eval hr_agent evals/  # eval gate
+uv run ruff check .                  # lint
+uv run pytest                        # unit tests
+uv run adk eval hr_agent evals/      # eval gate
 ```
