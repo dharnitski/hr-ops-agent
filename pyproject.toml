@@ -5,7 +5,7 @@ description = "HR operations agent built on Google ADK, with HCM tools exposed v
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "google-adk",
+    "google-adk[eval]",
     "mcp",
 ]
 
@@ -32,5 +32,6 @@ target-version = "py314"
 select = ["E", "F", "I", "UP"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests/unit"]
+markers = ["integration: crosses a real boundary (MCP server, model, GCP)"]
 asyncio_mode = "auto"
