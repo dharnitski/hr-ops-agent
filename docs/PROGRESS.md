@@ -5,7 +5,7 @@ Checklist mirrors `docs/COURSE.md`. Check off a step only when its done-criteria
 unchecked step.
 
 ## Module 1 — Foundations and first ADK agent
-- [ ] 1. Environment: uv venv, deps, Vertex AI or AI Studio choice, `hr_agent/.env`, budget alert
+- [x] 1. Environment: uv venv, deps, Vertex AI or AI Studio choice, `hr_agent/.env`, budget alert
 - [ ] 2. Mock data module (employees, PTO/sick hours, 2026 holidays)
 - [ ] 3. Tools: `get_pto_balance(employee_id)`, `list_holidays(year)`
 - [ ] 4. ADK agent (`root_agent`) + unit tests for tools
@@ -75,7 +75,9 @@ unchecked step.
 
 ## Decisions
 
-(Log design decisions here as they're made, with the module/step they belong to.)
+- M1.1: Chose Vertex AI (ADC) over AI Studio API key — aligns with Agent Engine deploy
+  path in Module 7. Model ID set via `MODEL_ID` in `.env`, currently `gemini-3.8-flash`
+  (re-verify before Module 8 tier-routing work; Gemini 2.5 retires 2026-10-20).
 
 ## Open questions
 
