@@ -29,7 +29,22 @@ line-length = 100
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
+select = [
+    "E", "W", "F", "I", "UP", "B", "SIM", "C4", "PT", "RUF", "ANN", "S", "ASYNC", "PL",
+    "TID", "ARG", "PTH", "T20", "RET", "PERF", "TRY",
+]
+ignore = ["TRY003", "PLR0913"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "PLR2004"]
+# Scratch scripts print by design.
+"scratch/**" = ["T201"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]

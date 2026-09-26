@@ -1,6 +1,8 @@
 """Mock HCM data. Stands in for a real HCM system; replaced by the MCP server in Module 2."""
 
-EMPLOYEES: dict[str, dict] = {
+from typing import Any
+
+EMPLOYEES: dict[str, dict[str, Any]] = {
     "E1001": {
         "name": "Alice Johnson",
         "title": "Engineering Manager",

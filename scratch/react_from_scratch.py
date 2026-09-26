@@ -9,6 +9,7 @@ import functools
 import os
 import time
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 from google import genai
@@ -57,7 +58,7 @@ class Stats:
         )
 
 
-def execute_tool(name: str, args: dict) -> dict:
+def execute_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
     """Run one tool; every failure becomes an observation the model can read."""
     fn = TOOLS.get(name)
     if fn is None:
@@ -83,6 +84,8 @@ def run(user_message: str, stats: Stats) -> str:
             stats.prompt_tokens += response.usage_metadata.prompt_token_count or 0
             stats.output_tokens += response.usage_metadata.candidates_token_count or 0
 
+        if not response.candidates or response.candidates[0].content is None:
+            return "Stopped: model returned no content."
         model_turn = response.candidates[0].content
         # Append unmodified: thought signatures must round-trip on Gemini 3.x.
         history.append(model_turn)
@@ -92,14 +95,15 @@ def run(user_message: str, stats: Stats) -> str:
             return response.text or ""
 
         # Parallel calls arrive in one turn; answer all of them in a single user turn.
-        result_parts = []
+        result_parts: list[types.Part] = []
         for call in calls:
+            name = call.name or ""
             args = dict(call.args or {})
-            result = execute_tool(call.name, args)
+            result = execute_tool(name, args)
             stats.tool_calls += 1
-            print(f"  [step {step}] {call.name}({args}) -> {result}")
+            print(f"  [step {step}] {name}({args}) -> {result}")
             result_parts.append(
-                types.Part.from_function_response(name=call.name, response={"result": result})
+                types.Part.from_function_response(name=name, response={"result": result})
             )
         history.append(types.Content(role="user", parts=result_parts))
 

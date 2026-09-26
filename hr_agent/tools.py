@@ -1,9 +1,11 @@
 """Model-facing HR tools. Docstrings and type hints are the contract the model sees."""
 
+from typing import Any
+
 from hr_agent.mock_data import EMPLOYEES, HOLIDAYS
 
 
-def get_pto_balance(employee_id: str) -> dict:
+def get_pto_balance(employee_id: str) -> dict[str, Any]:
     """Look up an employee's remaining PTO and sick-leave balance.
 
     Use when the user asks how much PTO, vacation, or sick time an employee has left.
@@ -32,7 +34,7 @@ def get_pto_balance(employee_id: str) -> dict:
     }
 
 
-def list_holidays(year: int) -> dict:
+def list_holidays(year: int) -> dict[str, Any]:
     """List the company holidays for a calendar year.
 
     Use when the user asks which days are company holidays or whether a date is a holiday.
