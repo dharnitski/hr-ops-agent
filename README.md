@@ -38,4 +38,5 @@ uv run ruff check .                  # lint
 uv run pytest                        # unit tests (tests/unit)
 uv run pytest tests/integration     # integration tests (need hr_agent/.env)
 uv run adk eval hr_agent evals/      # eval gate
+uv run python -m scratch.react_from_scratch  # no-framework ReAct loop (needs hr_agent/.env)
 ```
