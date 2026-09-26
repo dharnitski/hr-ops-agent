@@ -5,6 +5,8 @@ from typing import Any
 from hr_agent.mock_data import EMPLOYEES, HOLIDAYS
 
 
+# Temporary: mcp_server/handlers.py duplicates the ID lookup. These local tools are replaced
+# by MCP equivalents in M2.3; do not share code across that boundary.
 def get_pto_balance(employee_id: str) -> dict[str, Any]:
     """Look up an employee's remaining PTO and sick-leave balance.
 
