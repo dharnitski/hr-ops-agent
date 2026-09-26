@@ -1,4 +1,4 @@
-from hr_agent.tools import get_pto_balance, list_holidays
+from hr_agent.tools import find_employee, get_pto_balance, list_holidays
 
 
 def test_get_pto_balance_success() -> None:
@@ -47,3 +47,41 @@ def test_list_holidays_unknown_year_lists_available() -> None:
     result = list_holidays(1999)
     assert result["status"] == "error"
     assert "2026" in result["error"]
+
+
+def test_find_employee_single_match_returns_minimal_fields() -> None:
+    assert find_employee("Bob Smith") == {
+        "status": "success",
+        "matches": [{"employee_id": "E1002", "name": "Bob Smith", "title": "Software Engineer"}],
+    }
+
+
+def test_find_employee_multiple_matches_is_ambiguous() -> None:
+    result = find_employee("alice")
+    assert result["status"] == "ambiguous"
+    assert {m["employee_id"] for m in result["matches"]} == {"E1001", "E1005"}
+
+
+def test_find_employee_full_name_disambiguates() -> None:
+    result = find_employee("alice nguyen")
+    assert result["status"] == "success"
+    assert result["matches"][0]["employee_id"] == "E1005"
+
+
+def test_find_employee_case_and_whitespace_insensitive() -> None:
+    assert find_employee("  BOB   smith ")["status"] == "success"
+
+
+def test_find_employee_does_not_leak_balances() -> None:
+    match = find_employee("Bob")["matches"][0]
+    assert set(match) == {"employee_id", "name", "title"}
+
+
+def test_find_employee_no_match_returns_error() -> None:
+    result = find_employee("Zed")
+    assert result["status"] == "error"
+    assert "Zed" in result["error"]
+
+
+def test_find_employee_blank_name_returns_error() -> None:
+    assert find_employee("   ")["status"] == "error"

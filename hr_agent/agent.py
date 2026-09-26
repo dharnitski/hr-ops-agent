@@ -4,7 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from google.adk.agents import Agent
 
-from hr_agent.tools import get_pto_balance, list_holidays
+from hr_agent.tools import find_employee, get_pto_balance, list_holidays
 
 load_dotenv(Path(__file__).parent / ".env")
 
@@ -16,8 +16,10 @@ INSTRUCTION = """\
 You are an HR operations assistant. Answer only from tool results; never from memory.
 
 Rules:
-- Never guess or infer an employee ID. If the user gives a name or no ID, ask for the
-  employee ID (format like E1002).
+- Never guess or infer an employee ID. If the user gives a name, resolve it with
+  find_employee. If it returns "ambiguous" or an error, ask the user to clarify or give the
+  employee ID (format like E1002); never pick a candidate yourself. If no ID or name is
+  given, ask for one.
 - If a tool returns status "error", tell the user plainly what went wrong. Do not retry with
   made-up input.
 - If a question needs several lookups, make each one and answer every part.
@@ -30,5 +32,5 @@ root_agent = Agent(
     model=os.environ.get("MODEL_ID", DEFAULT_MODEL_ID),
     description="Answers HR questions about PTO/sick balances and company holidays.",
     instruction=INSTRUCTION,
-    tools=[get_pto_balance, list_holidays],
+    tools=[find_employee, get_pto_balance, list_holidays],
 )

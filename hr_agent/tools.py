@@ -59,3 +59,36 @@ def list_holidays(year: int) -> dict[str, Any]:
         "year": year,
         "holidays": [{"date": d, "name": n} for d, n in sorted(holidays.items())],
     }
+
+
+def find_employee(name: str) -> dict[str, Any]:
+    """Find employees by name to resolve an employee ID.
+
+    Use when the user refers to an employee by name and you need their ID for another tool.
+    Matching is case-insensitive and every word of the query must appear in the name, so
+    "alice" matches all Alices and "alice nguyen" matches one. If more than one employee
+    matches, do NOT choose: show the candidates and ask the user which one they mean.
+
+    Args:
+        name: Full or partial employee name, e.g. "Bob Smith" or "alice".
+
+    Returns:
+        {"status": "success", "matches": [{"employee_id", "name", "title"}]} for exactly one
+        match; {"status": "ambiguous", "matches": [...]} for several; {"status": "error",
+        "error": <reason>} for a blank name or no match (ask the user for the ID or a fuller name).
+    """
+    # TODO(Module 6): no caller identity check; any user can enumerate employees by name.
+    tokens = name.lower().split()
+    if not tokens:
+        return {"status": "error", "error": "Name is empty. Provide a full or partial name."}
+    matches = [
+        {"employee_id": employee_id, "name": e["name"], "title": e["title"]}
+        for employee_id, e in EMPLOYEES.items()
+        if all(t in e["name"].lower() for t in tokens)
+    ]
+    if not matches:
+        return {
+            "status": "error",
+            "error": f"No employee found matching '{name}'. Ask for the employee ID.",
+        }
+    return {"status": "success" if len(matches) == 1 else "ambiguous", "matches": matches}
