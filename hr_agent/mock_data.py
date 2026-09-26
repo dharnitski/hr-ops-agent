@@ -55,3 +55,23 @@ HOLIDAYS: dict[int, dict[str, str]] = {
         "2026-12-25": "Christmas Day",
     },
 }
+
+# Payroll runs, aggregates only (no per-employee pay).
+PAYROLL_RUNS: dict[str, dict[str, Any]] = {
+    "PR-2026-08": {
+        "period_start": "2026-08-01",
+        "period_end": "2026-08-31",
+        "pay_date": "2026-09-04",
+        "status": "paid",
+        "employee_count": 5,
+        "total_gross": 61250.00,
+    },
+    "PR-2026-09": {
+        "period_start": "2026-09-01",
+        "period_end": "2026-09-30",
+        "pay_date": "2026-10-02",
+        "status": "draft",
+        "employee_count": 5,
+        "total_gross": 61250.00,
+    },
+}
