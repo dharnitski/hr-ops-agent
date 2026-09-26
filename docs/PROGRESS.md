@@ -18,7 +18,7 @@ unchecked step.
 ## Module 2 — Tools and MCP
 - [x] `mcp_server/` with `get_employee` (M2.1)
 - [x] `get_payroll_run`, `submit_pto_request` (M2.2)
-- [ ] Typed schemas, idempotent writes, structured errors
+- [x] Typed schemas, idempotent writes, structured errors (M2.3)
 - [ ] Connect via ADK MCP toolset
 - [ ] Second MCP client proving reuse
 - [ ] Tests for the server
@@ -111,6 +111,16 @@ unchecked step.
   requests don't consume the key. Hours are computed server-side (weekdays minus holidays),
   never model-supplied. Balance is not decremented and pending requests aren't counted
   against it, so concurrent requests can overdraw; fix when state moves to a real store.
+
+- M2.3: Wire contract is strict, handlers stay lenient. `Annotated[..., Field(pattern/length)]`
+  on handler params is enforced by the MCP layer (a malformed ID or date is rejected as a
+  `ToolError` before the handler runs) and published in the input schema; direct handler
+  calls still normalize. Semantic date errors (impossible date, end < start) stay
+  `invalid_dates` result data. Outputs are `TypedDict` unions on `status`, with `Literal`
+  error codes and statuses published in `outputSchema`. Schema-layer rejections are
+  protocol errors, not `{"status": "error"}` results; the agent must handle both. Unknown
+  arguments are rejected (`additionalProperties: false`) so a misspelled write argument
+  fails loudly; done by patching the generated arg model (no public option in mcp).
 
 ## Open questions
 

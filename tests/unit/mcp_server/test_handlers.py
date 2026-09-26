@@ -45,7 +45,9 @@ def _reset_requests() -> Iterator[None]:
 
 
 def test_get_employee_error_has_code() -> None:
-    assert get_employee("E9999")["code"] == "not_found"
+    result = get_employee("E9999")
+    assert result["status"] == "error"
+    assert result["code"] == "not_found"
 
 
 def test_get_payroll_run_success() -> None:
@@ -71,6 +73,7 @@ def test_get_payroll_run_omits_per_employee_pay() -> None:
 
 def test_get_payroll_run_not_found() -> None:
     result = get_payroll_run("PR-1999-01")
+    assert result["status"] == "error"
     assert result["code"] == "not_found"
     assert "PR-2026-09" in result["error"]
 
@@ -87,12 +90,15 @@ def test_submit_pto_success_skips_weekend() -> None:
 def test_submit_pto_skips_holiday() -> None:
     # Labor Day 2026-09-07 (Monday) is a company holiday.
     result = submit_pto_request("E1002", "2026-09-07", "2026-09-08", "k1")
+    assert result["status"] == "success"
     assert result["hours"] == 8.0
 
 
 def test_submit_pto_replay_returns_original() -> None:
     first = submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1")
     again = submit_pto_request("e1002", "2026-09-11", "2026-09-11", "k1")
+    assert first["status"] == "success"
+    assert again["status"] == "success"
     assert again["replayed"] is True
     assert again["request_id"] == first["request_id"]
     assert len(handlers._pto_requests) == 1
@@ -101,12 +107,15 @@ def test_submit_pto_replay_returns_original() -> None:
 def test_submit_pto_key_reuse_with_different_args() -> None:
     submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1")
     result = submit_pto_request("E1002", "2026-09-14", "2026-09-14", "k1")
+    assert result["status"] == "error"
     assert result["code"] == "idempotency_conflict"
 
 
 def test_submit_pto_distinct_keys_create_distinct_requests() -> None:
     a = submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1")
     b = submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k2")
+    assert a["status"] == "success"
+    assert b["status"] == "success"
     assert a["request_id"] != b["request_id"]
 
 
