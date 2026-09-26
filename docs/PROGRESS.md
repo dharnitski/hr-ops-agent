@@ -17,7 +17,7 @@ unchecked step.
 
 ## Module 2 — Tools and MCP
 - [x] `mcp_server/` with `get_employee` (M2.1)
-- [ ] `get_payroll_run`, `submit_pto_request` (M2.2)
+- [x] `get_payroll_run`, `submit_pto_request` (M2.2)
 - [ ] Typed schemas, idempotent writes, structured errors
 - [ ] Connect via ADK MCP toolset
 - [ ] Second MCP client proving reuse
@@ -103,6 +103,14 @@ unchecked step.
   pure functions; `server.py` is thin wiring. mcp 2.x: `MCPServer` replaces `FastMCP`.
   ID-lookup logic is duplicated with the agent's local tools until M2.3; not shared across
   the MCP boundary.
+
+- M2.2: Errors carry a machine-readable `code` plus message. `get_payroll_run` returns
+  aggregates only. `submit_pto_request`: caller-supplied `idempotency_key` (survives agent
+  retries; server-generated keys can't dedupe a retry); same key + same args replays the
+  original (`replayed: true`); same key + different args is `idempotency_conflict`; failed
+  requests don't consume the key. Hours are computed server-side (weekdays minus holidays),
+  never model-supplied. Balance is not decremented and pending requests aren't counted
+  against it, so concurrent requests can overdraw; fix when state moves to a real store.
 
 ## Open questions
 
