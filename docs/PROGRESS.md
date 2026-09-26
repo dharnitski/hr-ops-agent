@@ -16,7 +16,8 @@ unchecked step.
 - [x] 9. `docs/01-when-to-use-an-agent.md`
 
 ## Module 2 — Tools and MCP
-- [ ] `mcp_server/` with `get_employee`, `get_payroll_run`, `submit_pto_request`
+- [x] `mcp_server/` with `get_employee` (M2.1)
+- [ ] `get_payroll_run`, `submit_pto_request` (M2.2)
 - [ ] Typed schemas, idempotent writes, structured errors
 - [ ] Connect via ADK MCP toolset
 - [ ] Second MCP client proving reuse
