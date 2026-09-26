@@ -19,7 +19,7 @@ unchecked step.
 - [x] `mcp_server/` with `get_employee` (M2.1)
 - [x] `get_payroll_run`, `submit_pto_request` (M2.2)
 - [x] Typed schemas, idempotent writes, structured errors (M2.3)
-- [ ] Connect via ADK MCP toolset
+- [x] Connect via ADK MCP toolset (M2.4)
 - [ ] Second MCP client proving reuse
 - [ ] Tests for the server
 - [ ] `docs/02-tool-contract-guidelines.md`
@@ -121,6 +121,15 @@ unchecked step.
   protocol errors, not `{"status": "error"}` results; the agent must handle both. Unknown
   arguments are rejected (`additionalProperties: false`) so a misspelled write argument
   fails loudly; done by patching the generated arg model (no public option in mcp).
+
+- M2.4: `McpToolset` (adk 2.9.2 + mcp 2.2.0 work together; `MCPToolset` is a deprecated alias)
+  over Streamable HTTP, URL from `HCM_MCP_URL`. `tool_filter` exposes only `get_employee`
+  and `submit_pto_request`; payroll stays unexposed until Module 3/6. `find_employee`,
+  `get_pto_balance`, `list_holidays` remain local (no MCP equivalent yet). The model
+  generates `idempotency_key` (prompt rule: fresh per request, reuse only on identical
+  retry); a collision with different args fails loudly as `idempotency_conflict`. PTO writes
+  have no user confirmation yet (Module 6 HITL). Integration test spawns the server as a
+  subprocess on port 8000.
 
 ## Open questions
 
