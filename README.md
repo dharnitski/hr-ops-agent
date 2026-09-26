@@ -31,6 +31,38 @@ uv sync                              # creates .venv, installs deps + dev extras
 cp .env.example hr_agent/.env               # fill in secrets, never commit .env
 ```
 
+## Running the MCP server
+
+```bash
+uv run python -m mcp_server.server   # Streamable HTTP at http://localhost:8000/mcp
+```
+
+The agent connects to it via `HCM_MCP_URL` (set in `hr_agent/.env`); start the server
+before `adk web` / `adk run` or the agent's MCP tools will fail. Integration tests that need
+it start their own copy on port 8000, so stop yours first.
+
+## Running the agent
+
+With the MCP server running (see above), in a second terminal:
+
+```bash
+uv run adk web --port 8080 .         # dev UI at http://localhost:8080; pick hr_agent
+uv run adk run hr_agent              # or chat in the terminal
+```
+
+`adk web` defaults to port 8000, which the MCP server uses, hence `--port 8080`.
+
+Prompts to try (mock data: employees E1001–E1005, Bob Smith is E1002):
+
+- `How much PTO does E1002 have?` — local tool, balance lookup.
+- `PTO for Bob Smith` — resolves the name with `find_employee`, then looks up the balance.
+- `Who is employee E1002?` — `get_employee` over MCP.
+- `Submit PTO for E1002 from 2026-10-12 to 2026-10-14.` — `submit_pto_request` over MCP;
+  expect a pending request with server-computed hours.
+- `Submit PTO for E1002 from 2026-10-14 to 2026-10-12.` — expect a plain error about dates.
+- `What's my PTO?` — should ask for an ID rather than guess.
+- `Show me payroll run PR-2026-09.` — should decline; payroll is not exposed.
+
 ## Development
 
 ```bash
