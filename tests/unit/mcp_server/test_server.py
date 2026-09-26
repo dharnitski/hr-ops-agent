@@ -7,8 +7,10 @@ from typing import Any
 import pytest
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult
+from pydantic import TypeAdapter
 
 from mcp_server import handlers
+from mcp_server.handlers import IsoDate
 from mcp_server.server import mcp
 
 TOOLS = {"get_employee", "get_payroll_run", "submit_pto_request"}
@@ -48,6 +50,27 @@ def test_published_schemas_enforce_constraints() -> None:
     assert pto["start_date"]["pattern"] == r"^\d{4}-\d{2}-\d{2}$"
     assert pto["idempotency_key"]["maxLength"] == 64
     assert tools["get_payroll_run"].input_schema["properties"]["run_id"]["pattern"]
+
+
+ISO_DATE_SCHEMA = {
+    "type": "string",
+    "pattern": r"^\d{4}-\d{2}-\d{2}$",
+    "description": "ISO date YYYY-MM-DD.",
+    "examples": ["2026-09-11"],
+}
+
+
+def test_iso_date_field_json_schema() -> None:
+    # Pydantic (the framework's schema generator) turns the Field into this exact schema.
+    assert TypeAdapter(IsoDate).json_schema() == ISO_DATE_SCHEMA
+
+
+def test_iso_date_field_published_on_tool_input_schema() -> None:
+    # The MCP layer adds only a title derived from the parameter name.
+    tools = {t.name: t for t in asyncio.run(mcp.list_tools())}
+    props = tools["submit_pto_request"].input_schema["properties"]
+    assert props["start_date"] == {**ISO_DATE_SCHEMA, "title": "Start Date"}
+    assert props["end_date"] == {**ISO_DATE_SCHEMA, "title": "End Date"}
 
 
 def test_submit_schema_requires_all_arguments() -> None:
