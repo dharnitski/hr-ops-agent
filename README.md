@@ -41,6 +41,18 @@ The agent connects to it via `HCM_MCP_URL` (set in `hr_agent/.env`); start the s
 before `adk web` / `adk run` or the agent's MCP tools will fail. Integration tests that need
 it start their own copy on port 8000, so stop yours first.
 
+## Running the standalone MCP client
+
+`scratch/mcp_client.py` talks to the server with the plain `mcp` client (no ADK, no model).
+With the server running, in a second terminal:
+
+```bash
+uv run python scratch/mcp_client.py  # lists tools, exercises errors and idempotent writes
+```
+
+It reads `HCM_MCP_URL` (default `http://localhost:8000/mcp`) and exits non-zero if a
+replay or conflict check fails.
+
 ## Running the agent
 
 With the MCP server running (see above), in a second terminal:
