@@ -118,7 +118,9 @@ unchecked step.
   calls still normalize. Semantic date errors (impossible date, end < start) stay
   `invalid_dates` result data. Outputs are `TypedDict` unions on `status`, with `Literal`
   error codes and statuses published in `outputSchema`. Schema-layer rejections are
-  protocol errors, not `{"status": "error"}` results; the agent must handle both.
+  protocol errors, not `{"status": "error"}` results; the agent must handle both. Unknown
+  arguments are rejected (`additionalProperties: false`) so a misspelled write argument
+  fails loudly; done by patching the generated arg model (no public option in mcp).
 
 ## Open questions
 

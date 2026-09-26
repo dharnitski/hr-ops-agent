@@ -169,3 +169,28 @@ def test_pto_key_conflict_over_dispatch() -> None:
 def test_responses_never_leak_sensitive_fields() -> None:
     result = call("get_employee", {"employee_id": "E1002"})
     assert not {"salary", "pto_hours", "manager"} & set(result)
+
+
+def test_every_input_schema_forbids_additional_properties() -> None:
+    # Published contract: clients (and model tool-calling) see that unknown keys are invalid.
+    for tool in asyncio.run(mcp.list_tools()):
+        assert tool.input_schema.get("additionalProperties") is False, tool.name
+
+
+def test_unknown_argument_rejected_not_silently_dropped() -> None:
+    # An undeclared field (here a smuggled `salary`) must fail loudly, not be dropped.
+    with pytest.raises(ToolError, match="Extra inputs are not permitted"):
+        asyncio.run(mcp.call_tool("get_employee", {"employee_id": "E1002", "salary": True}))
+
+
+def test_misspelled_write_argument_creates_nothing() -> None:
+    args = {
+        "employee_id": "E1002",
+        "start_date": "2026-09-11",
+        "end_date": "2026-09-11",
+        "idempotency_key": "k1",
+        "end_dat": "2026-09-14",
+    }
+    with pytest.raises(ToolError, match="Extra inputs are not permitted"):
+        asyncio.run(mcp.call_tool("submit_pto_request", args))
+    assert not handlers._pto_requests
