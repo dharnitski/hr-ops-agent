@@ -97,6 +97,12 @@ unchecked step.
   (authorization, write approval) live in the tool/server layer; prompt rules are the soft
   layer only.
 
+- M2.1: Streamable HTTP transport (shared service, independent deploy, headers carry caller
+  identity). `get_employee` returns id/name/title only (data minimization). Handlers are
+  pure functions; `server.py` is thin wiring. mcp 2.x: `MCPServer` replaces `FastMCP`.
+  ID-lookup logic is duplicated with the agent's local tools until M2.3; not shared across
+  the MCP boundary.
+
 ## Open questions
 
 - Module 3: does ADK 2.x still ship `SequentialAgent`/`ParallelAgent`/`LoopAgent`
