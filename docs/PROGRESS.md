@@ -81,9 +81,6 @@ unchecked step.
 - M1.1: Chose Vertex AI (ADC) over AI Studio API key — aligns with Agent Engine deploy
   path in Module 7. Model ID set via `MODEL_ID` in `.env`, currently `gemini-3.5-flash-lite`
   (re-verify before Module 8 tier-routing work; Gemini 2.5 retires 2026-10-20).
-- M1.5: Switched from `gemini-3.8-flash` to `gemini-3.5-flash-lite`: 3.8 took 70-150s per
-  trivial call on `global` (bare SDK too, so not ADK; network fine; generation itself <1s
-  server-side), lite takes ~1s. 3.8 is not served in `us-central1`. TODO: retest 3.8 later.
 
 ## Open questions
 
