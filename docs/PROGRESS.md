@@ -79,7 +79,7 @@ unchecked step.
   (ID format, available years). IDs normalized (strip/upper). Tests live in `tests/unit/`;
   integration tests in `tests/integration/`, on demand.
 - M1.1: Chose Vertex AI (ADC) over AI Studio API key — aligns with Agent Engine deploy
-  path in Module 7. Model ID set via `MODEL_ID` in `.env`, currently `gemini-3.8-flash`
+  path in Module 7. Model ID set via `MODEL_ID` in `.env`, currently `gemini-3.5-flash-lite`
   (re-verify before Module 8 tier-routing work; Gemini 2.5 retires 2026-10-20).
 
 ## Open questions
