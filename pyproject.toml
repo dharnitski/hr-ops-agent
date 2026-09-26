@@ -34,4 +34,11 @@ select = ["E", "F", "I", "UP"]
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
 markers = ["integration: crosses a real boundary (MCP server, model, GCP)"]
+# Third-party deprecations we can't fix; keep narrow so our own warnings still show.
+filterwarnings = [
+    "ignore:'_UnionGenericAlias' is deprecated:DeprecationWarning",
+    "ignore:BaseAgentConfig is deprecated:DeprecationWarning",
+    "ignore:Inheritance class AiohttpClientSession:DeprecationWarning",
+    "ignore:\\[EXPERIMENTAL\\] feature FeatureName.JSON_SCHEMA_FOR_FUNC_DECL:UserWarning",
+]
 asyncio_mode = "auto"
