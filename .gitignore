@@ -23,7 +23,6 @@ env/
 .coverage
 .coverage.*
 htmlcov/
-.mypy_cache/
 .ruff_cache/
 
 # ADK / eval artifacts
