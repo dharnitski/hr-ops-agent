@@ -9,7 +9,8 @@ from hr_agent.tools import get_pto_balance, list_holidays
 load_dotenv(Path(__file__).parent / ".env")
 
 # Default keeps import working without secrets (unit tests, CI); override via MODEL_ID in .env.
-DEFAULT_MODEL_ID = "gemini-3.8-flash"
+# TODO: retest gemini-3.8-flash (slow on 2026-09-25; see .env.example)
+DEFAULT_MODEL_ID = "gemini-3.5-flash-lite"
 
 INSTRUCTION = """\
 You are an HR operations assistant. Answer only from tool results; never from memory.
