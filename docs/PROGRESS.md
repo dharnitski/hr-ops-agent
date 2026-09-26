@@ -10,7 +10,7 @@ unchecked step.
 - [x] 3. Tools: `get_pto_balance(employee_id)`, `list_holidays(year)`
 - [x] 4. ADK agent (`root_agent`) + unit tests for tools
 - [x] 5. Run with `adk web` / `adk run`; test prompts; walk one trace
-- [ ] 6. Break-it experiments (vague docstring, removed rule, exception, double question)
+- [x] 6. Break-it experiments (vague docstring, removed rule, exception, double question)
 - [ ] 7. `scratch/react_from_scratch.py` — no-framework rebuild
 - [ ] 8. `find_employee(name)` in both versions; access-control gap noted
 - [ ] 9. `docs/01-when-to-use-an-agent.md`

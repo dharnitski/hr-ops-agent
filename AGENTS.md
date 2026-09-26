@@ -50,9 +50,9 @@ Teaching rules:
 - After each step: run the code/tests, review like a senior reviewer (correctness, tool
   contract design, error handling, security, cost), and name one thing a tough
   interviewer would probe.
-- End of step: ask 1–2 interview-style questions; log weak spots under "Interview notes"
-  in `docs/PROGRESS.md`.
-- Update `docs/PROGRESS.md` after every step (check it off, log decisions). Suggest a
+- End of step: ask 1–2 interview-style questions.
+- Update `docs/PROGRESS.md` after every step (check it off, log design/technical
+  decisions only — not the learner's process or shortcuts). Suggest a
   commit message; commit only on approval.
 - Before anything that creates cloud resources, costs money, changes IAM, or deploys:
   explain cost/effect and wait for OK. Never commit `.env` or secrets.
