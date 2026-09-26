@@ -12,7 +12,7 @@ unchecked step.
 - [x] 5. Run with `adk web` / `adk run`; test prompts; walk one trace
 - [x] 6. Break-it experiments (vague docstring, removed rule, exception, double question)
 - [x] 7. `scratch/react_from_scratch.py` — no-framework rebuild
-- [ ] 8. `find_employee(name)` in both versions; access-control gap noted
+- [x] 8. `find_employee(name)` in both versions; access-control gap noted
 - [ ] 9. `docs/01-when-to-use-an-agent.md`
 
 ## Module 2 — Tools and MCP
@@ -88,6 +88,10 @@ unchecked step.
 - M1.7: Manual loop appends the model turn unmodified (thought signatures must round-trip
   on Gemini 3.x). Tool failures returned as observations. `MAX_STEPS` bounds steps only,
   not cost; token/time budgets and idempotent writes are deferred to Modules 2/6.
+- M1.8: `find_employee` returns id/name/title only (no balances); `ambiguous` status for
+  multiple matches, prompt-enforced (hard gate deferred to Module 6 HITL/callbacks).
+  Caller-identity authorization belongs in the MCP server, with identity from the
+  transport, not a model-supplied argument (Modules 2/6).
 
 ## Open questions
 

@@ -16,13 +16,13 @@ from google import genai
 from google.genai import types
 
 from hr_agent.agent import DEFAULT_MODEL_ID, INSTRUCTION
-from hr_agent.tools import get_pto_balance, list_holidays
+from hr_agent.tools import find_employee, get_pto_balance, list_holidays
 
 load_dotenv(Path(__file__).parent.parent / "hr_agent" / ".env")
 
 MAX_STEPS = 6
 MODEL_ID = os.environ.get("MODEL_ID", DEFAULT_MODEL_ID)
-TOOLS = {fn.__name__: fn for fn in (get_pto_balance, list_holidays)}
+TOOLS = {fn.__name__: fn for fn in (find_employee, get_pto_balance, list_holidays)}
 
 config = types.GenerateContentConfig(
     system_instruction=INSTRUCTION,

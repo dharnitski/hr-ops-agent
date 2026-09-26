@@ -1,5 +1,5 @@
 from hr_agent.agent import root_agent
-from hr_agent.tools import get_pto_balance, list_holidays
+from hr_agent.tools import find_employee, get_pto_balance, list_holidays
 
 
 def test_root_agent_name_and_model() -> None:
@@ -8,7 +8,7 @@ def test_root_agent_name_and_model() -> None:
 
 
 def test_root_agent_tools() -> None:
-    assert set(root_agent.tools) == {get_pto_balance, list_holidays}
+    assert set(root_agent.tools) == {find_employee, get_pto_balance, list_holidays}
 
 
 def test_instruction_forbids_guessing_ids() -> None:
