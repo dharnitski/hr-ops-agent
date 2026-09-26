@@ -11,7 +11,7 @@ unchecked step.
 - [x] 4. ADK agent (`root_agent`) + unit tests for tools
 - [x] 5. Run with `adk web` / `adk run`; test prompts; walk one trace
 - [x] 6. Break-it experiments (vague docstring, removed rule, exception, double question)
-- [ ] 7. `scratch/react_from_scratch.py` — no-framework rebuild
+- [x] 7. `scratch/react_from_scratch.py` — no-framework rebuild
 - [ ] 8. `find_employee(name)` in both versions; access-control gap noted
 - [ ] 9. `docs/01-when-to-use-an-agent.md`
 
@@ -85,6 +85,10 @@ unchecked step.
 - M1.5: Behavior of the five test prompts is covered by live integration tests
   (`tests/integration/hr_agent/test_agent_live.py`), asserting trajectory before wording.
 
+- M1.7: Manual loop appends the model turn unmodified (thought signatures must round-trip
+  on Gemini 3.x). Tool failures returned as observations. `MAX_STEPS` bounds steps only,
+  not cost; token/time budgets and idempotent writes are deferred to Modules 2/6.
+
 ## Open questions
 
 - Module 3: does ADK 2.x still ship `SequentialAgent`/`ParallelAgent`/`LoopAgent`
@@ -93,11 +97,3 @@ unchecked step.
 - Model IDs drift fast (Gemini 2.5 shuts down 2026-10-20 mid-course) — reconfirm exact
   Gemini 3.x IDs at Module 1 step 1 and again before Module 8.
 - Confirm `VertexAiMemoryBankService` (or current equivalent name) import path at Module 4.
-
-## Interview notes
-
-(Weak spots surfaced during interview-style Q&A go here, tagged by module/step.)
-
-- M1.3 (open): how to enforce "only yourself or your reports" on `get_pto_balance` without
-  trusting the model? Expected: identity from session/auth context injected server-side,
-  authorization check inside the tool/MCP layer, not in the prompt (Module 6).
