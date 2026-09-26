@@ -55,5 +55,9 @@ filterwarnings = [
     "ignore:BaseAgentConfig is deprecated:DeprecationWarning",
     "ignore:Inheritance class AiohttpClientSession:DeprecationWarning",
     "ignore:\\[EXPERIMENTAL\\] feature FeatureName.JSON_SCHEMA_FOR_FUNC_DECL:UserWarning",
+    "ignore:MCPTool class is deprecated:DeprecationWarning",
+    "ignore:\\[EXPERIMENTAL\\] feature FeatureName.BASE_AUTHENTICATED_TOOL:UserWarning",
+    "ignore:\\[EXPERIMENTAL\\] feature FeatureName._MCP_GRACEFUL_ERROR_HANDLING:UserWarning",
+    "ignore:\\[EXPERIMENTAL\\] feature FeatureName.PLUGGABLE_AUTH:UserWarning",
 ]
 asyncio_mode = "auto"
