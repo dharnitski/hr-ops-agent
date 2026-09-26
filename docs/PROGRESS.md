@@ -22,7 +22,7 @@ unchecked step.
 - [x] Connect via ADK MCP toolset (M2.4)
 - [x] Second MCP client proving reuse
 - [x] Tests for the server
-- [ ] `docs/02-tool-contract-guidelines.md`
+- [x] `docs/02-tool-contract-guidelines.md`
 
 ## Module 3 — Multi-agent orchestration
 - [ ] Root router + PTO agent, read-only payroll agent, policy Q&A agent (RAG over handbook)
@@ -145,6 +145,11 @@ unchecked step.
   `{"result": ...}` wrapping, replay/conflict, and rejection of malformed/unknown input
   without consuming the idempotency key. Not in CI (integration policy); cheap enough to
   add later.
+
+- M2 doc: `docs/02-tool-contract-guidelines.md` rule of thumb: format constraints go in the
+  schema (protocol error, published contract); semantic checks are result data (model-readable
+  message). Idempotency keys are caller-supplied because only the caller knows a call is a
+  retry; the model choosing keys is why the server fails loudly on key reuse with different args.
 
 ## Open questions
 
