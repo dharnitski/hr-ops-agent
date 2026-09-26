@@ -16,7 +16,8 @@ def get_pto_balance(employee_id: str) -> dict:
         On success: {"status": "success", "employee_id", "name", "pto_hours", "sick_hours"},
         with balances in hours. On failure: {"status": "error", "error": <reason>}.
     """
-    employee = EMPLOYEES.get(employee_id.strip().upper())
+    normalized_id = employee_id.strip().upper()
+    employee = EMPLOYEES.get(normalized_id)
     if employee is None:
         return {
             "status": "error",
@@ -24,7 +25,7 @@ def get_pto_balance(employee_id: str) -> dict:
         }
     return {
         "status": "success",
-        "employee_id": employee_id.strip().upper(),
+        "employee_id": normalized_id,
         "name": employee["name"],
         "pto_hours": employee["pto_hours"],
         "sick_hours": employee["sick_hours"],
