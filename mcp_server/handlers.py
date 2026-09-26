@@ -1,18 +1,93 @@
 """HCM tool handlers. Pure functions: no transport, so they test without a server."""
 
 from datetime import date, timedelta
-from typing import Any
+from typing import Annotated, Any, Literal, TypedDict
+
+from pydantic import Field
 
 # Temporary: reuses the agent's mock data. M2.3 moves the data into mcp_server/ and removes
 # the agent's local tools; the agent must reach the server only over MCP.
 from hr_agent.mock_data import EMPLOYEES, HOLIDAYS, PAYROLL_RUNS
+
+# Wire contract: Field constraints are enforced by the MCP layer before a handler runs, so
+# malformed input is rejected at the boundary. Handlers still normalize and validate
+# defensively (they are also called directly), so direct calls stay lenient.
+EmployeeId = Annotated[
+    str,
+    Field(
+        pattern=r"^E\d{4}$", description="Employee ID: 'E' plus four digits.", examples=["E1002"]
+    ),
+]
+RunId = Annotated[
+    str,
+    Field(pattern=r"^PR-\d{4}-\d{2}$", description="Payroll run ID.", examples=["PR-2026-09"]),
+]
+IsoDate = Annotated[
+    str,
+    Field(
+        pattern=r"^\d{4}-\d{2}-\d{2}$", description="ISO date YYYY-MM-DD.", examples=["2026-09-11"]
+    ),
+]
+IdempotencyKey = Annotated[
+    str,
+    Field(
+        min_length=1,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9_.:-]+$",
+        description="Caller-chosen unique key; reuse only when retrying the same request.",
+    ),
+]
+
+ErrorCode = Literal[
+    "not_found",
+    "invalid_dates",
+    "insufficient_balance",
+    "no_working_days",
+    "idempotency_conflict",
+    "invalid_key",
+]
+
+
+class ErrorResult(TypedDict):
+    status: Literal["error"]
+    code: ErrorCode
+    error: str
+
+
+class EmployeeResult(TypedDict):
+    status: Literal["success"]
+    employee_id: str
+    name: str
+    title: str
+
+
+class PayrollRunResult(TypedDict):
+    status: Literal["success"]
+    run_id: str
+    period_start: str
+    period_end: str
+    pay_date: str
+    run_status: Literal["draft", "approved", "paid"]
+    employee_count: int
+    total_gross: float
+
+
+class PtoRequestResult(TypedDict):
+    status: Literal["success"]
+    request_id: str
+    employee_id: str
+    start_date: str
+    end_date: str
+    hours: float
+    request_status: Literal["pending"]
+    replayed: bool
 
 
 # The ID normalize/lookup/not-found logic below duplicates hr_agent/tools.py:get_pto_balance
 # on purpose: sharing code across the MCP boundary would couple deploy and versioning. The
 # agent-side copy goes away in M2.3. Once a second handler lands here (M2.2), extract a
 # private _lookup(employee_id) within this module.
-def get_employee(employee_id: str) -> dict[str, Any]:
+def get_employee(employee_id: EmployeeId) -> EmployeeResult | ErrorResult:
     """Look up an employee's basic profile by employee ID.
 
     Use to confirm who an ID belongs to. Does not return pay, balances, or reporting lines.
@@ -39,10 +114,10 @@ HOURS_PER_DAY = 8.0
 LAST_WEEKDAY = 4  # Friday; date.weekday() is Monday=0.
 
 # In-memory stand-in for the HCM write path: idempotency_key -> (arguments, stored result).
-_pto_requests: dict[str, tuple[tuple[str, str, str], dict[str, Any]]] = {}
+_pto_requests: dict[str, tuple[tuple[str, str, str], PtoRequestResult]] = {}
 
 
-def _error(code: str, message: str) -> dict[str, Any]:
+def _error(code: ErrorCode, message: str) -> ErrorResult:
     return {"status": "error", "code": code, "error": message}
 
 
@@ -51,14 +126,14 @@ def _lookup(employee_id: str) -> tuple[str, dict[str, Any] | None]:
     return normalized_id, EMPLOYEES.get(normalized_id)
 
 
-def _not_found(employee_id: str) -> dict[str, Any]:
+def _not_found(employee_id: str) -> ErrorResult:
     return _error(
         "not_found",
         f"No employee found with ID '{employee_id}'. IDs look like 'E1002'.",
     )
 
 
-def get_payroll_run(run_id: str) -> dict[str, Any]:
+def get_payroll_run(run_id: RunId) -> PayrollRunResult | ErrorResult:
     """Look up a payroll run's summary by run ID. Read-only; aggregates only.
 
     Does not return per-employee pay. Use for questions about run status and timing.
@@ -99,7 +174,7 @@ def _working_hours(start: date, end: date) -> float:
 
 def _check_request(
     employee: dict[str, Any], start_text: str, end_text: str
-) -> tuple[date, date, float] | dict[str, Any]:
+) -> tuple[date, date, float] | ErrorResult:
     """Validate dates and balance. Returns (start, end, hours) or an error dict."""
     try:
         start = date.fromisoformat(start_text)
@@ -120,8 +195,11 @@ def _check_request(
 
 
 def submit_pto_request(
-    employee_id: str, start_date: str, end_date: str, idempotency_key: str
-) -> dict[str, Any]:
+    employee_id: EmployeeId,
+    start_date: IsoDate,
+    end_date: IsoDate,
+    idempotency_key: IdempotencyKey,
+) -> PtoRequestResult | ErrorResult:
     """Submit a PTO request for an employee. Creates a record; not instantly approved.
 
     Hours are computed by the server: 8h per weekday, excluding company holidays. Does not
@@ -166,7 +244,7 @@ def submit_pto_request(
         return checked
     start, end, hours = checked
 
-    result: dict[str, Any] = {
+    result: PtoRequestResult = {
         "status": "success",
         "request_id": f"PTO-{len(_pto_requests) + 1:05d}",
         "employee_id": normalized_id,
