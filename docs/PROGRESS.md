@@ -9,8 +9,8 @@ unchecked step.
 - [x] 2. Mock data module (employees, PTO/sick hours, 2026 holidays)
 - [x] 3. Tools: `get_pto_balance(employee_id)`, `list_holidays(year)`
 - [x] 4. ADK agent (`root_agent`) + unit tests for tools
-- [ ] 5. Run with `adk web` / `adk run`; test prompts; walk one trace
-- [ ] 6. Break-it experiments (vague docstring, removed rule, exception, double question)
+- [x] 5. Run with `adk web` / `adk run`; test prompts; walk one trace
+- [x] 6. Break-it experiments (vague docstring, removed rule, exception, double question)
 - [ ] 7. `scratch/react_from_scratch.py` — no-framework rebuild
 - [ ] 8. `find_employee(name)` in both versions; access-control gap noted
 - [ ] 9. `docs/01-when-to-use-an-agent.md`
@@ -81,6 +81,9 @@ unchecked step.
 - M1.1: Chose Vertex AI (ADC) over AI Studio API key — aligns with Agent Engine deploy
   path in Module 7. Model ID set via `MODEL_ID` in `.env`, currently `gemini-3.5-flash-lite`
   (re-verify before Module 8 tier-routing work; Gemini 2.5 retires 2026-10-20).
+
+- M1.5: Behavior of the five test prompts is covered by live integration tests
+  (`tests/integration/hr_agent/test_agent_live.py`), asserting trajectory before wording.
 
 ## Open questions
 
