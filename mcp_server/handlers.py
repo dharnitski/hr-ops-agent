@@ -240,7 +240,7 @@ def submit_pto_request(
     if employee is None:
         return _not_found(employee_id)
     checked = _check_request(employee, args[1], args[2])
-    if isinstance(checked, dict):
+    if not isinstance(checked, tuple):
         return checked
     start, end, hours = checked
 

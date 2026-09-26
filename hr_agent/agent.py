@@ -3,7 +3,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from google.adk.agents import Agent
-from google.adk.tools.mcp_tool import StreamableHTTPConnectionParams
+from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 
 from hr_agent.tools import find_employee, get_pto_balance, list_holidays
