@@ -13,7 +13,7 @@ unchecked step.
 - [x] 6. Break-it experiments (vague docstring, removed rule, exception, double question)
 - [x] 7. `scratch/react_from_scratch.py` — no-framework rebuild
 - [x] 8. `find_employee(name)` in both versions; access-control gap noted
-- [ ] 9. `docs/01-when-to-use-an-agent.md`
+- [x] 9. `docs/01-when-to-use-an-agent.md`
 
 ## Module 2 — Tools and MCP
 - [ ] `mcp_server/` with `get_employee`, `get_payroll_run`, `submit_pto_request`
@@ -92,6 +92,10 @@ unchecked step.
   multiple matches, prompt-enforced (hard gate deferred to Module 6 HITL/callbacks).
   Caller-identity authorization belongs in the MCP server, with identity from the
   transport, not a model-supplied argument (Modules 2/6).
+
+- M1.9: Pattern choice rule: least autonomy that meets the requirement. Hard gates
+  (authorization, write approval) live in the tool/server layer; prompt rules are the soft
+  layer only.
 
 ## Open questions
 
