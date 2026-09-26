@@ -20,8 +20,8 @@ unchecked step.
 - [x] `get_payroll_run`, `submit_pto_request` (M2.2)
 - [x] Typed schemas, idempotent writes, structured errors (M2.3)
 - [x] Connect via ADK MCP toolset (M2.4)
-- [ ] Second MCP client proving reuse
-- [ ] Tests for the server
+- [x] Second MCP client proving reuse
+- [x] Tests for the server
 - [ ] `docs/02-tool-contract-guidelines.md`
 
 ## Module 3 — Multi-agent orchestration
@@ -131,7 +131,26 @@ unchecked step.
   have no user confirmation yet (Module 6 HITL). Integration test spawns the server as a
   subprocess on port 8000.
 
+- M2 reuse: `scratch/mcp_client.py` (mcp `Client`, no `hr_agent`/`mcp_server` imports) exercises
+  list/get/submit/idempotency from the published schemas alone. Findings: union return
+  types arrive wrapped as `structuredContent: {"result": ...}`; business errors are
+  results (`status: error`), while schema violations (malformed ID, unknown argument)
+  arrive as `isError` results whose text is a raw pydantic message, so clients need both
+  paths, and that text is poor model-facing guidance (candidate for M2.5 server tests /
+  the tool-contract doc).
+
+- M2 server tests: handler and dispatch-level unit tests already covered logic and schemas;
+  the gap was the wire. `tests/integration/mcp_server/test_server_http.py` is a black-box
+  suite (spawns the server, `mcp.Client`, no model or credentials) covering tool listing,
+  `{"result": ...}` wrapping, replay/conflict, and rejection of malformed/unknown input
+  without consuming the idempotency key. Not in CI (integration policy); cheap enough to
+  add later.
+
 ## Open questions
+
+- M2: schema-layer rejections return raw pydantic text with no example ID. A server-side
+  rewrite (subclass overriding `call_tool`) was tried and dropped as too complex; leave to
+  clients unless it proves to hurt agent behavior. Note for `docs/02-tool-contract-guidelines.md`.
 
 - Module 3: does ADK 2.x still ship `SequentialAgent`/`ParallelAgent`/`LoopAgent`
   alongside the new Workflow Runtime, or are they superseded? Verify against current
