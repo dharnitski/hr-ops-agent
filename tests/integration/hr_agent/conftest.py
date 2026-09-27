@@ -23,25 +23,50 @@ def require_gcp() -> None:
         pytest.skip("GOOGLE_CLOUD_PROJECT not set (see hr_agent/.env)")
 
 
+async def _run_turn(runner: InMemoryRunner, session_id: str, prompt: str) -> Turn:
+    turn = Turn()
+    message = types.Content(role="user", parts=[types.Part(text=prompt)])
+    async for event in runner.run_async(user_id="u1", session_id=session_id, new_message=message):
+        for call in event.get_function_calls():
+            if call.name == "transfer_to_agent":
+                turn.transfers.append(str((call.args or {}).get("agent_name")))
+            else:
+                turn.tool_calls.append((call.name or "", dict(call.args or {})))
+        if event.is_final_response() and event.content and event.content.parts:
+            turn.text = "".join(p.text or "" for p in event.content.parts)
+    return turn
+
+
 @pytest.fixture
 def ask() -> Callable[[str], Awaitable[Turn]]:
-    """Run one user message through root_agent; return the tool calls and final text."""
+    """Run one user message through root_agent; return the tool calls and final text.
+
+    Each call starts a fresh session, so the agent has no memory of a prior `ask` call. Use
+    `conversation` instead to send several turns into the same session.
+    """
 
     async def _ask(prompt: str) -> Turn:
         runner = InMemoryRunner(agent=root_agent, app_name="hr_agent_it")
         session = await runner.session_service.create_session(app_name="hr_agent_it", user_id="u1")
-        turn = Turn()
-        message = types.Content(role="user", parts=[types.Part(text=prompt)])
-        async for event in runner.run_async(
-            user_id="u1", session_id=session.id, new_message=message
-        ):
-            for call in event.get_function_calls():
-                if call.name == "transfer_to_agent":
-                    turn.transfers.append(str((call.args or {}).get("agent_name")))
-                else:
-                    turn.tool_calls.append((call.name or "", dict(call.args or {})))
-            if event.is_final_response() and event.content and event.content.parts:
-                turn.text = "".join(p.text or "" for p in event.content.parts)
-        return turn
+        return await _run_turn(runner, session.id, prompt)
 
     return _ask
+
+
+@pytest.fixture
+def conversation() -> Callable[[], Awaitable[Callable[[str], Awaitable[Turn]]]]:
+    """Start a multi-turn conversation: each call to the returned function is one more turn in
+    the same session, so session state set on one turn (e.g. current_employee_id) is visible on
+    the next.
+    """
+
+    async def _start() -> Callable[[str], Awaitable[Turn]]:
+        runner = InMemoryRunner(agent=root_agent, app_name="hr_agent_it")
+        session = await runner.session_service.create_session(app_name="hr_agent_it", user_id="u1")
+
+        async def _turn(prompt: str) -> Turn:
+            return await _run_turn(runner, session.id, prompt)
+
+        return _turn
+
+    return _start

@@ -2,12 +2,18 @@
 
 from typing import Any
 
+from google.adk.tools import ToolContext
+
 from hr_agent.mock_data import EMPLOYEES, HOLIDAYS
+
+# Session state key: the employee ID the conversation is currently about. Set by any tool
+# that resolves or confirms one; read by agent instructions via `{current_employee_id?}`.
+CURRENT_EMPLOYEE_ID_KEY = "current_employee_id"
 
 
 # Temporary: mcp_server/handlers.py duplicates the ID lookup. These local tools are replaced
 # by MCP equivalents in M2.3; do not share code across that boundary.
-def get_pto_balance(employee_id: str) -> dict[str, Any]:
+def get_pto_balance(employee_id: str, tool_context: ToolContext) -> dict[str, Any]:
     """Look up an employee's remaining PTO and sick-leave balance.
 
     Use when the user asks how much PTO, vacation, or sick time an employee has left.
@@ -27,6 +33,7 @@ def get_pto_balance(employee_id: str) -> dict[str, Any]:
             "status": "error",
             "error": f"No employee found with ID '{employee_id}'. IDs look like 'E1002'.",
         }
+    tool_context.state[CURRENT_EMPLOYEE_ID_KEY] = normalized_id
     return {
         "status": "success",
         "employee_id": normalized_id,
@@ -63,7 +70,7 @@ def list_holidays(year: int) -> dict[str, Any]:
     }
 
 
-def find_employee(name: str) -> dict[str, Any]:
+def find_employee(name: str, tool_context: ToolContext) -> dict[str, Any]:
     """Find employees by name to resolve an employee ID.
 
     Use when the user refers to an employee by name and you need their ID for another tool.
@@ -93,4 +100,7 @@ def find_employee(name: str) -> dict[str, Any]:
             "status": "error",
             "error": f"No employee found matching '{name}'. Ask for the employee ID.",
         }
-    return {"status": "success" if len(matches) == 1 else "ambiguous", "matches": matches}
+    if len(matches) == 1:
+        tool_context.state[CURRENT_EMPLOYEE_ID_KEY] = matches[0]["employee_id"]
+        return {"status": "success", "matches": matches}
+    return {"status": "ambiguous", "matches": matches}
