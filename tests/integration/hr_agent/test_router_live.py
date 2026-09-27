@@ -1,4 +1,4 @@
-"""Live model calls: router hands PTO to pto_agent and declines out-of-scope requests."""
+"""Live model calls: router picks the right specialist and declines out-of-scope requests."""
 
 from collections.abc import Awaitable, Callable
 
@@ -22,3 +22,9 @@ async def test_salary_request_is_declined_by_router(ask: Ask) -> None:
     assert turn.transfers == []
     assert turn.tool_calls == []
     assert turn.text
+
+
+async def test_payroll_question_routes_to_payroll_agent(ask: Ask) -> None:
+    turn = await ask("What's the pay date for PR-2026-09?")
+    assert turn.transfers == ["payroll_agent"]
+    assert [name for name, _ in turn.tool_calls] == ["get_payroll_run"]

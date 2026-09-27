@@ -30,8 +30,8 @@ pto_agent = Agent(
     name="pto_agent",
     model=MODEL_ID,
     description=(
-        "Handles PTO and sick-leave balances, company holidays, and PTO requests for an "
-        "employee (lookup by name or ID). Not for payroll, pay, or policy questions."
+        "Handles employee lookup (name, title, ID), PTO and sick-leave balances, company "
+        "holidays, and PTO requests. Not for payroll, pay, or policy questions."
     ),
     instruction=INSTRUCTION,
     tools=[find_employee, get_pto_balance, list_holidays, hcm_toolset],
