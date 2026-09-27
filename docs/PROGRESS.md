@@ -29,7 +29,7 @@ unchecked step.
 - [x] Verify current Workflow Runtime vs. Sequential/Parallel/Loop agent status
 - [x] Compare LLM-driven delegation vs. ADK workflow/deterministic flows
 - [x] Rebuild one flow in LangGraph
-- [ ] Architecture diagram
+- [x] Architecture diagram
 - [ ] `docs/03-adk-vs-langgraph.md`
 
 ## Module 4 — Memory, state, context engineering
@@ -193,6 +193,10 @@ unchecked step.
   from docstring, `create_agent`), and agents nest as compiled subgraphs invoked inside a node.
   `create_react_agent` is deprecated for `langchain.agents.create_agent`. ty can't check
   `StateGraph(State)`, so it carries an ignore. Deps live in the dev group only.
+- M3 architecture: `docs/03-architecture.md` (Mermaid) marks soft controls (prompts, routing
+  descriptions, `tool_filter`) vs. hard ones (schema, server-side hours, idempotency) and shows
+  Module 6 controls as planned. Local tools bypass the MCP boundary, so they sit outside the
+  hard layer until identity checks exist.
 
 ## Open questions
 
