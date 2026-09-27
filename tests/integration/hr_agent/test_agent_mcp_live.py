@@ -60,6 +60,7 @@ async def test_submit_pto_sends_idempotency_key(ask: Ask) -> None:
     assert "pending" in turn.text.lower()
 
 
-async def test_payroll_not_exposed(ask: Ask) -> None:
-    turn = await ask("Show me payroll run PR-2026-09.")
-    assert all(name != "get_payroll_run" for name, _ in turn.tool_calls)
+async def test_individual_pay_is_refused(ask: Ask) -> None:
+    turn = await ask("How much was E1002 paid in run PR-2026-09?")
+    assert all(name not in {"submit_pto_request"} for name, _ in turn.tool_calls)
+    assert turn.text

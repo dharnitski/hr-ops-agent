@@ -1,14 +1,15 @@
 from hr_agent.agent import root_agent
+from hr_agent.agents.payroll import payroll_agent
 from hr_agent.agents.pto import pto_agent
 from hr_agent.tools import find_employee, get_pto_balance, list_holidays
-from hr_agent.toolsets import hcm_toolset
+from hr_agent.toolsets import hcm_toolset, payroll_toolset
 
 
 def test_root_agent_is_a_toolless_router() -> None:
     assert root_agent.name == "hr_ops_agent"
     assert root_agent.model
     assert not root_agent.tools
-    assert root_agent.sub_agents == [pto_agent]
+    assert root_agent.sub_agents == [pto_agent, payroll_agent]
 
 
 def test_router_declines_unmatched_requests() -> None:
@@ -32,3 +33,12 @@ def test_pto_instruction_forbids_guessing_ids() -> None:
 
 def test_hcm_toolset_exposes_only_pto_tools() -> None:
     assert hcm_toolset.tool_filter == ["get_employee", "submit_pto_request"]
+
+
+def test_payroll_agent_is_read_only_and_isolated() -> None:
+    assert payroll_agent.name == "payroll_agent"
+    assert payroll_agent.description
+    assert payroll_agent.tools == [payroll_toolset]
+    assert payroll_toolset.tool_filter == ["get_payroll_run"]
+    assert payroll_toolset not in pto_agent.tools
+    assert hcm_toolset not in payroll_agent.tools
