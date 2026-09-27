@@ -16,9 +16,10 @@ flexibility and costs predictability, latency, tokens, and auditability.
 - **Workflow — payroll-cutoff reminder.** Trigger, query approvers with pending items, send
   notice. The path never varies and the action is outward-facing, so an LLM deciding whether
   to send is pure risk. At most use an LLM to draft the wording.
-- **Single agent — PTO/holiday Q&A (this repo).** Questions vary ("Jane's PTO and next
-  holiday?") but the tools are three read-only functions in one domain. The loop in
-  `hr_agent/agent.py` is enough.
+- **Single agent — PTO/holiday Q&A.** Questions vary ("Jane's PTO and next holiday?") but
+  the tools are three read-only functions in one domain, so a single loop is enough. (This
+  repo started here in Module 1; see the multi-agent example below for why it outgrew it
+  once payroll and policy joined in Module 3 — `hr_agent/agent.py` is now the router.)
 - **Multi-agent — "I'm moving states: what changes for benefits, withholding, and PTO?"**
   Spans benefits, payroll, and policy, each with different data sensitivity. Specialists
   allow per-domain tools, permissions, and evals; a single agent would hold all tools and

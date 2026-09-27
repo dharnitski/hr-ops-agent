@@ -54,10 +54,11 @@ act on what it says; only the server can enforce anything. Rules below come from
 
 - Docstring = first line what it does; then when to use it, what it does not return, an
   example value for every ID argument, and the success/error shapes.
-- **Expose the minimum.** The agent's `McpToolset` uses `tool_filter` to expose only
-  `get_employee` and `submit_pto_request`; `get_payroll_run` stays server-side until a
-  payroll agent with its own permissions exists (Module 3/6). Fewer tools means better
-  selection and a smaller blast radius.
+- **Expose the minimum.** `pto_agent`'s `hcm_toolset` uses `tool_filter` to expose only
+  `get_employee` and `submit_pto_request`. `get_payroll_run` is exposed separately through
+  `payroll_agent`'s own read-only `payroll_toolset` (Module 3); the split keeps PTO writes
+  and payroll reads on different specialists with different permissions. Fewer tools per
+  toolset means better selection and a smaller blast radius.
 
 ## Known gaps (deferred)
 

@@ -8,13 +8,13 @@ deployable to Agent Engine, Cloud Run, or GKE.
 
 ```
 hr-ops-agent/
-├── hr_agent/            # ADK agent package (Module 1, grows into multi-agent in M3)
+├── hr_agent/            # ADK agent package: router + PTO/payroll/policy specialists (M1-M3)
 ├── mcp_server/          # HCM tools as an MCP server (Module 2)
 ├── evals/               # eval sets + configs for adk eval (Module 5)
 ├── tests/               # unit/ (hermetic, in CI) and integration/ (real boundaries, on demand)
 ├── deploy/              # agent_engine/, cloud_run/, gke/ (Module 7)
 ├── docs/                # one-pagers, architecture doc, strategy memo
-├── scratch/             # react_from_scratch.py and experiments
+├── scratch/             # throwaway experiments: ReAct loop, Workflow probes, LangGraph router
 ├── .github/workflows/   # CI: lint, tests, eval gate
 ├── AGENTS.md            # project conventions for AI coding agents
 ├── pyproject.toml
@@ -52,16 +52,24 @@ uv run adk run hr_agent              # or chat in the terminal
 
 `adk web` defaults to port 8000, which the MCP server uses, hence `--port 8080`.
 
-Prompts to try (mock data: employees E1001–E1005, Bob Smith is E1002):
+`hr_agent.agent.root_agent` is a router with no tools of its own; it transfers each request
+to the `pto_agent`, `payroll_agent`, or `policy_agent` specialist (see
+[docs/03-architecture.md](docs/03-architecture.md)) and declines anything that matches none.
 
-- `How much PTO does E1002 have?` — local tool, balance lookup.
+Prompts to try (mock data: employees E1001–E1005, Bob Smith is E1002; payroll run PR-2026-09):
+
+- `How much PTO does E1002 have?` — `pto_agent`, local tool balance lookup.
 - `PTO for Bob Smith` — resolves the name with `find_employee`, then looks up the balance.
 - `Who is employee E1002?` — `get_employee` over MCP.
 - `Submit PTO for E1002 from 2026-10-12 to 2026-10-14.` — `submit_pto_request` over MCP;
   expect a pending request with server-computed hours.
 - `Submit PTO for E1002 from 2026-10-14 to 2026-10-12.` — expect a plain error about dates.
 - `What's my PTO?` — should ask for an ID rather than guess.
-- `Show me payroll run PR-2026-09.` — should decline; payroll is not exposed.
+- `Show me payroll run PR-2026-09.` — `payroll_agent`, `get_payroll_run` over MCP; expect
+  read-only aggregates (period, pay date, status, headcount, total gross).
+- `What's the PTO carryover policy?` — `policy_agent`, `search_handbook`; answers from the
+  handbook and cites the section.
+- `What's Bob Smith's salary?` — should decline; no specialist handles individual pay.
 
 ## Development
 
