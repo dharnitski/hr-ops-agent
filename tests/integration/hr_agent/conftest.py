@@ -70,3 +70,25 @@ def conversation() -> Callable[[], Awaitable[Callable[[str], Awaitable[Turn]]]]:
         return _turn
 
     return _start
+
+
+@pytest.fixture
+def sessions() -> Callable[[], Awaitable[Callable[[str], Awaitable[Turn]]]]:
+    """Start a new session per call, all sharing one runner (and its memory_service) and user_id.
+
+    Unlike `conversation` (one session, many turns -- for session-state tests), this is for
+    long-term memory tests (M4.2): each call is a fresh session, so session state
+    (current_employee_id, pending_pto_request) never carries over, but anything pto_agent's
+    after_agent_callback persisted to memory from an earlier session does.
+    """
+    runner = InMemoryRunner(agent=root_agent, app_name="hr_agent_it")
+
+    async def _new_session() -> Callable[[str], Awaitable[Turn]]:
+        session = await runner.session_service.create_session(app_name="hr_agent_it", user_id="u1")
+
+        async def _turn(prompt: str) -> Turn:
+            return await _run_turn(runner, session.id, prompt)
+
+        return _turn
+
+    return _new_session

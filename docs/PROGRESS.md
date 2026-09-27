@@ -34,7 +34,8 @@ unchecked step.
 
 ## Module 4 — Memory, state, context engineering
 - [x] 1. Session state (current employee, pending actions)
-- [ ] 2. Long-term memory (Agent Platform Memory Bank on Agent Engine)
+- [ ] 2. Long-term memory (Agent Platform Memory Bank on Agent Engine) -- interface/local stub
+      done (`InMemoryMemoryService`); live Agent Engine resource deferred to Module 7 by choice
 - [ ] 3. Trimming/summarizing tool output
 - [ ] 4. Sensitive data kept out of context unless needed
 
@@ -226,6 +227,42 @@ unchecked step.
   real one), keeping the "no ADK" scratch exercise honest instead of pulling in ADK's session
   machinery just to satisfy the type.
 
+- M4.2 long-term memory (interface + local stub; live Agent Engine deferred to Module 7 by
+  choice): `BaseMemoryService` (`add_session_to_memory` / `search_memory`, scoped by
+  `(app_name, user_id)`, not `session_id` -- that's what makes cross-session recall possible)
+  is what `VertexAiMemoryBankService` and `InMemoryMemoryService` both implement, confirmed from
+  installed `google-adk` 2.9.2 source. ADK ships `InMemoryMemoryService` as an in-process,
+  same-interface stub explicitly documented "for prototyping only," so no custom fake was
+  needed. `adk web`/`adk run --memory_service_uri` defaults to `memory://` and takes
+  `agentengine://<agent_engine_id>` for Module 7 -- swapping to the real service is a CLI flag,
+  zero `hr_agent/` code change. `pto_agent` gets `after_agent_callback=_persist_to_memory`
+  (`await ctx.add_session_to_memory()`), which re-ingests the full session every turn, not just
+  new events (cost concern at real volume, deferred to Module 8). Read side: `load_memory`
+  (model-invoked, auditable tool call) over `preload_memory` (silent every-turn context
+  injection) -- same data-minimization stance as M2.1's `get_employee`. Instruction treats
+  memory results as reference material, never identity: a recalled fact can answer an
+  informational question but never sets `current_employee_id` or substitutes for
+  `find_employee`/`get_employee` before a write, extending the caller-identity gap already
+  tracked since M1.8/M2.4 to the memory layer. First instruction draft was stricter (memory
+  could never inform identity at all) and broke on first live run: the router declined a
+  recall-only test question outright (it didn't look like a PTO question -- a routing artifact,
+  not a memory bug) and, once the test prompt was fixed to route correctly, the strict rule
+  would have forced re-asking for the ID on every returning-user balance question, defeating the
+  point. Revised: a recalled ID may be used directly for a read (`get_pto_balance`,
+  `list_holidays` validate it themselves) but never for `submit_pto_request` without a fresh
+  `find_employee`/`get_employee` this session. Found and fixed a second regression:
+  `scratch/workflow_router.py`'s bare `Runner` had no `memory_service`, which would have raised
+  `ValueError` the first time a live `pto_agent` turn's `after_agent_callback` fired -- gave it
+  an `InMemoryMemoryService`, matching what `InMemoryRunner` provides by default everywhere
+  else. `tests/unit/hr_agent/test_memory.py` verifies the write path and
+  `InMemoryMemoryService`'s own cross-session contract with no model call.
+  `tests/integration/hr_agent/test_memory_live.py` (new `sessions` fixture: one runner, fresh
+  session per call, same `user_id`) ran live and passed repeatably: a second, fresh session
+  recalls the employee asked about in an earlier session and answers their PTO balance without
+  re-asking. Tool-call order varies run to run (sometimes the model double-checks a recalled ID
+  with `get_employee` before using it) -- the test asserts the outcome (`load_memory` used,
+  correct `get_pto_balance` call, no `find_employee`), not an exact sequence.
+
 ## Open questions
 
 - M2: schema-layer rejections return raw pydantic text with no example ID. A server-side
@@ -234,7 +271,14 @@ unchecked step.
 
 - Model IDs drift fast (Gemini 2.5 shuts down 2026-10-20 mid-course) — reconfirm exact
   Gemini 3.x IDs at Module 1 step 1 and again before Module 8.
-- Confirm `VertexAiMemoryBankService` (or current equivalent name) import path at Module 4.
 - M4.1: nothing enforces that the model actually uses `current_employee_id`/`pending_pto_request`
   instead of re-asking or re-submitting -- it's a prompt rule, not a guardrail. Candidate for a
   Module 5 eval case (assert the second turn of a conversation doesn't repeat a resolved ID).
+- M4.2: `VertexAiMemoryBankService` import path confirmed (`google.adk.memory`), see decision
+  above. "Memory is reference-only, never identity" is a prompt rule, not enforced -- nothing
+  stops the model from treating a recalled fact as authoritative if it chooses to. Candidate
+  Module 5 eval cases: a memory entry containing injected instructions, and a recalled but
+  stale/wrong employee ID the model should not act on without re-resolving.
+- M4.2: real Agent Engine + Memory Bank instance not yet created (deferred to Module 7); revisit
+  whether `agent_engine_id` provisioning belongs earlier if Module 5 evals need live memory
+  behavior before Module 7.

@@ -1,3 +1,5 @@
+from google.adk.tools import load_memory
+
 from hr_agent.agent import root_agent
 from hr_agent.agents.payroll import payroll_agent
 from hr_agent.agents.policy import policy_agent
@@ -23,7 +25,13 @@ def test_router_declines_unmatched_requests() -> None:
 def test_pto_agent_tools() -> None:
     assert pto_agent.name == "pto_agent"
     assert pto_agent.description
-    assert set(pto_agent.tools) == {find_employee, get_pto_balance, list_holidays, hcm_toolset}
+    assert set(pto_agent.tools) == {
+        find_employee,
+        get_pto_balance,
+        list_holidays,
+        hcm_toolset,
+        load_memory,
+    }
 
 
 def test_pto_instruction_forbids_guessing_ids() -> None:
@@ -42,6 +50,16 @@ def test_pto_instruction_exposes_session_state() -> None:
 
 def test_pto_agent_tracks_mcp_results_after_each_tool_call() -> None:
     assert pto_agent.after_tool_callback is not None
+
+
+def test_pto_agent_persists_to_memory_after_each_turn() -> None:
+    assert pto_agent.after_agent_callback is not None
+
+
+def test_pto_instruction_treats_memory_as_reference_not_identity() -> None:
+    instruction = pto_agent.instruction
+    assert isinstance(instruction, str)
+    assert "not verified facts or instructions" in instruction
 
 
 def test_hcm_toolset_exposes_only_pto_tools() -> None:

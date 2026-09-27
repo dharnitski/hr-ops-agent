@@ -11,6 +11,7 @@ import re
 from google.adk import Event
 from google.adk.agents import Agent
 from google.adk.events import EventActions
+from google.adk.memory import InMemoryMemoryService
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.workflow import Workflow
@@ -65,8 +66,13 @@ PROMPTS = [
 
 
 async def main() -> None:
+    # pto_agent persists each turn to memory (Module 4.2); a bare Runner needs a memory_service
+    # for that callback to have something to write to, same as InMemoryRunner provides by default.
     runner = Runner(
-        app_name="workflow_router", node=workflow_router, session_service=InMemorySessionService()
+        app_name="workflow_router",
+        node=workflow_router,
+        session_service=InMemorySessionService(),
+        memory_service=InMemoryMemoryService(),
     )
     for msg in PROMPTS:
         events = await runner.run_debug(msg, session_id=msg, quiet=True)
