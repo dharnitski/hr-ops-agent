@@ -26,7 +26,9 @@ async def test_missing_id_asks_instead_of_calling_tool(ask: Ask) -> None:
 async def test_unknown_id_reports_error_without_retrying(ask: Ask) -> None:
     turn = await ask("PTO for E9999")
     assert turn.tool_calls
-    assert all(name == "get_pto_balance" for name, _ in turn.tool_calls)
+    # The model may verify the ID via get_employee before (or instead of) calling
+    # get_pto_balance -- both are reasonable ways to surface an unknown ID.
+    assert all(name in ("get_pto_balance", "get_employee") for name, _ in turn.tool_calls)
     assert all(args["employee_id"] == "E9999" for _, args in turn.tool_calls)
     assert "E9999" in turn.text
 
