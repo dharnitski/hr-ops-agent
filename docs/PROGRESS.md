@@ -16,61 +16,61 @@ unchecked step.
 - [x] 9. `docs/01-when-to-use-an-agent.md`
 
 ## Module 2 — Tools and MCP
-- [x] `mcp_server/` with `get_employee` (M2.1)
-- [x] `get_payroll_run`, `submit_pto_request` (M2.2)
-- [x] Typed schemas, idempotent writes, structured errors (M2.3)
-- [x] Connect via ADK MCP toolset (M2.4)
-- [x] Second MCP client proving reuse
-- [x] Tests for the server
-- [x] `docs/02-tool-contract-guidelines.md`
+- [x] 1. `mcp_server/` with `get_employee` (M2.1)
+- [x] 2. `get_payroll_run`, `submit_pto_request` (M2.2)
+- [x] 3. Typed schemas, idempotent writes, structured errors (M2.3)
+- [x] 4. Connect via ADK MCP toolset (M2.4)
+- [x] 5. Second MCP client proving reuse
+- [x] 6. Tests for the server
+- [x] 7. `docs/02-tool-contract-guidelines.md`
 
 ## Module 3 — Multi-agent orchestration
-- [x] Root router + PTO agent, read-only payroll agent, policy Q&A agent (RAG over handbook)
-- [x] Verify current Workflow Runtime vs. Sequential/Parallel/Loop agent status
-- [x] Compare LLM-driven delegation vs. ADK workflow/deterministic flows
-- [x] Rebuild one flow in LangGraph
-- [x] Architecture diagram
-- [x] `docs/03-adk-vs-langgraph.md`
+- [x] 1. Root router + PTO agent, read-only payroll agent, policy Q&A agent (RAG over handbook)
+- [x] 2. Verify current Workflow Runtime vs. Sequential/Parallel/Loop agent status
+- [x] 3. Compare LLM-driven delegation vs. ADK workflow/deterministic flows
+- [x] 4. Rebuild one flow in LangGraph
+- [x] 5. Architecture diagram
+- [x] 6. `docs/03-adk-vs-langgraph.md`
 
 ## Module 4 — Memory, state, context engineering
-- [ ] Session state (current employee, pending actions)
-- [ ] Long-term memory (Agent Platform Memory Bank on Agent Engine)
-- [ ] Trimming/summarizing tool output
-- [ ] Sensitive data kept out of context unless needed
+- [ ] 1. Session state (current employee, pending actions)
+- [ ] 2. Long-term memory (Agent Platform Memory Bank on Agent Engine)
+- [ ] 3. Trimming/summarizing tool output
+- [ ] 4. Sensitive data kept out of context unless needed
 
 ## Module 5 — Evaluation
-- [ ] 30–50 case eval set (happy path, ambiguous, adversarial: prompt injection, salary requests)
-- [ ] Trajectory + response evals via `adk eval`
-- [ ] LLM-as-judge rubric
-- [ ] Launch bar (task success, zero unauthorized access, p95 latency, cost/task)
-- [ ] Wired into CI as a gate
-- [ ] `docs/05-eval-standard.md`
+- [ ] 1. 30–50 case eval set (happy path, ambiguous, adversarial: prompt injection, salary requests)
+- [ ] 2. Trajectory + response evals via `adk eval`
+- [ ] 3. LLM-as-judge rubric
+- [ ] 4. Launch bar (task success, zero unauthorized access, p95 latency, cost/task)
+- [ ] 5. Wired into CI as a gate
+- [ ] 6. `docs/05-eval-standard.md`
 
 ## Module 6 — Safety and governance
-- [ ] Permission boundaries in tool/MCP layer (act as requesting user)
-- [ ] Human-in-the-loop callbacks (PTO confirm, payroll manager approval)
-- [ ] Audit log of every tool call
-- [ ] Rate / blast-radius limits
-- [ ] `docs/06-guardrail-standard.md`
+- [ ] 1. Permission boundaries in tool/MCP layer (act as requesting user)
+- [ ] 2. Human-in-the-loop callbacks (PTO confirm, payroll manager approval)
+- [ ] 3. Audit log of every tool call
+- [ ] 4. Rate / blast-radius limits
+- [ ] 5. `docs/06-guardrail-standard.md`
 
 ## Module 7 — Deploy to the cloud
-- [ ] Deploy to Agent Engine (`adk deploy agent_engine`)
-- [ ] Deploy to Cloud Run (`adk deploy cloud_run`)
-- [ ] Deploy to GKE (`adk deploy gke`)
-- [ ] Least-privilege service account, Secret Manager
-- [ ] CI/CD with eval gate, staging then prod
-- [ ] Compare with Agent Starter Pack layout
-- [ ] Tear down unused resources
-- [ ] `docs/07-deployment-tradeoffs.md`
+- [ ] 1. Deploy to Agent Engine (`adk deploy agent_engine`)
+- [ ] 2. Deploy to Cloud Run (`adk deploy cloud_run`)
+- [ ] 3. Deploy to GKE (`adk deploy gke`)
+- [ ] 4. Least-privilege service account, Secret Manager
+- [ ] 5. CI/CD with eval gate, staging then prod
+- [ ] 6. Compare with Agent Starter Pack layout
+- [ ] 7. Tear down unused resources
+- [ ] 8. `docs/07-deployment-tradeoffs.md`
 
 ## Module 8 — Observability, cost, Staff-level artifacts
-- [ ] OpenTelemetry traces to Cloud Trace
-- [ ] Dashboard: task success, tool error rate, latency, cost/task
-- [ ] Model-tier routing (Flash vs. Pro) with measured savings
-- [ ] Failure drill + RCA
-- [ ] `docs/08-reference-architecture.md`
-- [ ] `docs/08-platform-strategy-memo.md`
-- [ ] `docs/08-roi-cost-model.md`
+- [ ] 1. OpenTelemetry traces to Cloud Trace
+- [ ] 2. Dashboard: task success, tool error rate, latency, cost/task
+- [ ] 3. Model-tier routing (Flash vs. Pro) with measured savings
+- [ ] 4. Failure drill + RCA
+- [ ] 5. `docs/08-reference-architecture.md`
+- [ ] 6. `docs/08-platform-strategy-memo.md`
+- [ ] 7. `docs/08-roi-cost-model.md`
 
 ---
 
