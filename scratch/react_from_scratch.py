@@ -15,7 +15,8 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from hr_agent.agent import DEFAULT_MODEL_ID, INSTRUCTION
+from hr_agent.agents.pto import INSTRUCTION
+from hr_agent.config import DEFAULT_MODEL_ID
 from hr_agent.tools import find_employee, get_pto_balance, list_holidays
 
 load_dotenv(Path(__file__).parent.parent / "hr_agent" / ".env")

@@ -14,6 +14,7 @@ from hr_agent.agent import root_agent
 class Turn:
     tool_calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     text: str = ""
+    transfers: list[str] = field(default_factory=list)  # agents the router handed off to
 
 
 @pytest.fixture(autouse=True)
@@ -35,7 +36,10 @@ def ask() -> Callable[[str], Awaitable[Turn]]:
             user_id="u1", session_id=session.id, new_message=message
         ):
             for call in event.get_function_calls():
-                turn.tool_calls.append((call.name or "", dict(call.args or {})))
+                if call.name == "transfer_to_agent":
+                    turn.transfers.append(str((call.args or {}).get("agent_name")))
+                else:
+                    turn.tool_calls.append((call.name or "", dict(call.args or {})))
             if event.is_final_response() and event.content and event.content.parts:
                 turn.text = "".join(p.text or "" for p in event.content.parts)
         return turn
