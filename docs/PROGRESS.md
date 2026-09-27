@@ -41,7 +41,7 @@ unchecked step.
 
 ## Module 5 — Evaluation
 - [x] 1. 30–50 case eval set (happy path, ambiguous, adversarial: prompt injection, salary requests)
-- [ ] 2. Trajectory + response evals via `adk eval`
+- [x] 2. Trajectory + response evals via `adk eval`
 - [ ] 3. LLM-as-judge rubric
 - [ ] 4. Launch bar (task success, zero unauthorized access, p95 latency, cost/task)
 - [ ] 5. Wired into CI as a gate
@@ -335,13 +335,13 @@ unchecked step.
   `cli_tools_click.py` only auto-picks it up when exactly one evalset file is passed per `adk
   eval` invocation, so each tier below must be run (or CI-gated) as its own command, or with
   `--config_file_path` passed explicitly for a multi-file run.
-  33 cases across `evals/{happy_path,ambiguous,adversarial}/`, one `.evalset.json` +
+  31 cases across `evals/{happy_path,ambiguous,adversarial}/`, one `.evalset.json` +
   `test_config.json` per directory so each risk tier gets its own trajectory-matching strictness:
   - `happy_path` (15) / `ambiguous` (8): `ANY_ORDER` + `ignore_args: true`. Tolerates legitimate
     extra calls (e.g. the model double-checking a recalled ID, per M4.2's live-run note) and calls
     happening out of causal order between independent sub-questions (the M3-fix-#1 compound-query
     regression case has no real ordering constraint between its two lookups).
-  - `adversarial` (10): `EXACT` + `ignore_args: true`. Order is naturally fixed in every case here
+  - `adversarial` (8): `EXACT` + `ignore_args: true`. Order is naturally fixed in every case here
     (identity resolution always precedes the write), so `EXACT`'s real job is catching *extra*
     tool calls -- e.g. a silent retry with corrected dates after an `invalid_dates` error, or a
     bulk `get_pto_balance` sweep triggered by the prompt-injection case -- which `ANY_ORDER`/
@@ -381,7 +381,7 @@ unchecked step.
   - All numeric/date facts in golden responses (PTO/sick hours, working-day counts across
     2026-09/-10/-11/-12, which days are holidays) were hand-computed against `mock_data.py` and
     verified against the known Labor Day (Mon)/Thanksgiving (Thu) anchors, not guessed.
-  - All 33 cases now pass live (`adk eval hr_agent evals/<tier>/*.evalset.json`, one tier per
+  - All 31 cases now pass live (`adk eval hr_agent evals/<tier>/*.evalset.json`, one tier per
     invocation, gemini-3.5-flash-lite). Getting there surfaced four real bugs, none of them in
     the agent itself:
     1. **`adk eval`'s loader was incompatible with this package**, unrelated to the eval cases.
@@ -458,6 +458,36 @@ unchecked step.
   success" -- both look like just an extra `submit_pto_request` call. Still open; the honest fix
   is the same one already deferred to M5.3 (LLM-as-judge / rubrics), not another prompt patch.
 
+- M5.2 (running the eval, `adversarial_submit_pto_insufficient_balance` removed): re-running all
+  three tiers surfaced a case flaking on stale server state, not model behavior --
+  `submit_pto_request` was called twice: first with a key the MCP server rejected as
+  `idempotency_conflict` (recorded by an *earlier, separate* `adk eval` invocation against the
+  same long-lived server process), then a second, different key that reached the real
+  `insufficient_balance` error and passed. The server's idempotency store is an in-memory dict
+  (M2.2) that outlives any single `adk eval` run, and the model's key for a given prompt is
+  low-entropy enough (e.g. `pto-cg20261005`, derived from initials+date, not random) to collide
+  with what a prior run already recorded for the identical case. Root cause is test isolation
+  (`adk eval` reuses whatever MCP server is already running instead of a fresh one per run,
+  unlike `tests/integration/conftest.py`'s `hcm_server` fixture), not a case or agent defect --
+  the case passed cleanly (10/10 on retry) once run against server state that hadn't already
+  seen it. Removed the case anyway on explicit instruction, trading away real insufficient-
+  balance coverage rather than fixing the shared-server root cause; the same collision can hit
+  any other write-path adversarial case on a later rerun. Candidate fix for M5.5 (CI eval gate
+  needs this regardless): start a fresh MCP server subprocess per `adk eval` invocation.
+- M5.2 (`adversarial_payroll_run_unknown_id` removed): confirms the above wasn't isolated to one
+  case. Immediate rerun of the trimmed 9-case adversarial tier failed a *different, unrelated*
+  case: `get_payroll_run` right after `transfer_to_agent` hit a transient "no tool with that name
+  is available (only: transfer_to_agent)" framework error, then correctly retried with identical
+  args once the transfer had actually taken effect and got the real `not_found` response --
+  reasonable model behavior, but the extra call still fails `EXACT` match. Distinct root cause
+  from both the idempotency-key collision above and the M5.1 flake fix (same-args retry on a
+  business error, there patched only in `pto_agent`'s instruction, not `payroll_agent`'s). Removed
+  on explicit instruction rather than root-causing; two cases now gone from a tier meant to
+  guarantee *no unexpected extra calls*, and a third rerun could plausibly fail a third, still-
+  passing case the same way. Do not treat 8/8 adversarial as a stable green bar without addressing
+  the underlying causes (shared MCP server state, `EXACT` intolerant of justified retries,
+  inconsistent no-repeat instruction coverage across specialists) -- flagged, not fixed.
+
 ## Open questions
 
 - M2: schema-layer rejections return raw pydantic text with no example ID. A server-side
@@ -480,7 +510,7 @@ unchecked step.
 - M4.3: `num_invocations_to_keep=6` is unmeasured; needs real conversation-length/cost data
   (Module 5/8) to tune. `EventsCompactionConfig` is `@experimental` in adk 2.9.2 -- reconfirm its
   stability and whether it's still the summarization answer before relying on it later.
-- M5.1: all 33 cases pass live now (see decision above), but on a single run each with
+- M5.1: all 31 cases pass live now (see decision above), but on a single run each with
   `gemini-3.5-flash-lite` -- not repeated for flakiness beyond what surfaced incidentally
   (the OAuth/MCP transience). `response_match_score` thresholds (0.3 for happy_path/ambiguous)
   are still calibrated from one run's worth of scores, not a distribution. Before wiring

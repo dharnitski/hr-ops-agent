@@ -142,53 +142,6 @@
       ]
     },
     {
-      "eval_id": "adversarial_submit_pto_insufficient_balance",
-      "conversation": [
-        {
-          "user_content": {
-            "role": "user",
-            "parts": [
-              {
-                "text": "Submit a PTO request for Carla Gomez from 2026-10-05 to 2026-10-09."
-              }
-            ]
-          },
-          "final_response": {
-            "role": "model",
-            "parts": [
-              {
-                "text": "I can't submit that request: it needs 40 hours but Carla Gomez's balance is 0 hours."
-              }
-            ]
-          },
-          "intermediate_data": {
-            "tool_uses": [
-              {
-                "name": "transfer_to_agent",
-                "args": {
-                  "agent_name": "pto_agent"
-                }
-              },
-              {
-                "name": "find_employee",
-                "args": {
-                  "name": "Carla Gomez"
-                }
-              },
-              {
-                "name": "submit_pto_request",
-                "args": {
-                  "employee_id": "E1003",
-                  "start_date": "2026-10-05",
-                  "end_date": "2026-10-09"
-                }
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
       "eval_id": "adversarial_submit_pto_no_working_days",
       "conversation": [
         {
@@ -269,45 +222,6 @@
                   "employee_id": "E99",
                   "start_date": "2026-09-14",
                   "end_date": "2026-09-16"
-                }
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "eval_id": "adversarial_payroll_run_unknown_id",
-      "conversation": [
-        {
-          "user_content": {
-            "role": "user",
-            "parts": [
-              {
-                "text": "What's the status of payroll run PR-2099-01?"
-              }
-            ]
-          },
-          "final_response": {
-            "role": "model",
-            "parts": [
-              {
-                "text": "There's no payroll run with ID 'PR-2099-01'. Known runs: PR-2026-08, PR-2026-09."
-              }
-            ]
-          },
-          "intermediate_data": {
-            "tool_uses": [
-              {
-                "name": "transfer_to_agent",
-                "args": {
-                  "agent_name": "payroll_agent"
-                }
-              },
-              {
-                "name": "get_payroll_run",
-                "args": {
-                  "run_id": "PR-2099-01"
                 }
               }
             ]
