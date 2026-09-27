@@ -1,7 +1,9 @@
 from typing import Any
 
 from google.adk.agents import Agent, Context
+from google.adk.events import Event
 from google.adk.tools import BaseTool, ToolContext, load_memory
+from google.genai import types
 
 from hr_agent.config import MODEL_ID
 from hr_agent.tools import CURRENT_EMPLOYEE_ID_KEY, find_employee, get_pto_balance, list_holidays
@@ -84,14 +86,28 @@ def _track_mcp_results(
 
 
 async def _persist_to_memory(callback_context: Context) -> None:
-    """Writes this turn's session to long-term memory (Module 4.2).
+    """Writes a minimal fact to long-term memory, not the raw conversation (Module 4.4).
 
-    Cross-session recall (search_memory) is scoped by (app_name, user_id), not session_id, so
-    a returning user's earlier sessions become searchable once this runs. add_session_to_memory
-    re-ingests the full session every call, not just new events -- fine for a course-scale mock
-    HCM dataset; revisit if this gets expensive at real conversation volume (Module 8).
+    add_session_to_memory ingests every event verbatim -- exact PTO dates, hours, and sick
+    balances this turn discussed would sit in a durable, cross-session-searchable store
+    indefinitely. Cross-session recall (M4.2) only needs to know which employee the
+    conversation was about, so persist one synthetic fact instead of the turn's real content;
+    add_memory (a direct structured write, no synthetic event needed) would be a cleaner fit,
+    but InMemoryMemoryService doesn't implement it -- only VertexAiMemoryBankService does -- so
+    it isn't usable until Module 7's real resource exists. Nothing to persist if no employee was
+    resolved this turn (e.g. a holidays-only question).
     """
-    await callback_context.add_session_to_memory()
+    employee_id = callback_context.state.get(CURRENT_EMPLOYEE_ID_KEY)
+    if not employee_id:
+        return
+    fact = Event(
+        author="pto_agent",
+        content=types.Content(
+            role="model",
+            parts=[types.Part(text=f"Earlier, this user asked about employee {employee_id}.")],
+        ),
+    )
+    await callback_context.add_events_to_memory(events=[fact])
 
 
 pto_agent = Agent(

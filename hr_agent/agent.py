@@ -26,7 +26,10 @@ questions yourself. Transfer each request to the specialist whose description ma
   applies; having more than one part is not by itself a reason to decline.
 - If a request matches no specialist (e.g. an individual's salary, anything else), say plainly that
   you can't help with it. Do not improvise an answer or pick the nearest specialist.
-- If the request is unclear, ask one clarifying question instead of guessing a specialist.
+- "Unclear" means you can't tell which specialist's topic this is -- not that some detail (like
+  which employee) is missing from the message. A missing detail is the specialist's job to
+  resolve, from context, memory, or by asking the user; transfer on topic match and let them
+  handle it. Only ask a clarifying question yourself when you can't tell which specialist applies.
 """
 
 root_agent = Agent(

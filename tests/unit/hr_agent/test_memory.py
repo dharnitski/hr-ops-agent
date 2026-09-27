@@ -10,8 +10,22 @@ from google.adk.memory.in_memory_memory_service import InMemoryMemoryService
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from hr_agent.agents.pto import _persist_to_memory
+from hr_agent.agents.pto import PENDING_PTO_REQUEST_KEY, _persist_to_memory
 from hr_agent.config import MODEL_ID
+from hr_agent.tools import CURRENT_EMPLOYEE_ID_KEY
+
+
+async def _callback_context_with_memory(memory_service: InMemoryMemoryService) -> Context:
+    session_service = InMemorySessionService()
+    session = await session_service.create_session(app_name="test", user_id="u1")
+    invocation_context = InvocationContext(
+        invocation_id="test-invocation",
+        agent=Agent(name="test_agent", model=MODEL_ID),
+        session=session,
+        session_service=session_service,
+        memory_service=memory_service,
+    )
+    return Context(invocation_context)
 
 
 async def test_in_memory_memory_service_round_trips_by_user_not_session() -> None:
@@ -41,29 +55,33 @@ async def test_in_memory_memory_service_round_trips_by_user_not_session() -> Non
     )
 
 
-async def test_persist_to_memory_writes_the_session() -> None:
-    """_persist_to_memory (pto_agent's after_agent_callback) delegates to
-    Context.add_session_to_memory, which reads memory_service off the InvocationContext --
-    prove the wiring without going through a real agent turn."""
+async def test_persist_to_memory_writes_only_the_employee_id_not_the_turn() -> None:
+    """_persist_to_memory (pto_agent's after_agent_callback) must not leak the turn's real
+    content (balances, dates, hours) into the durable cross-session store (M4.4) -- it persists
+    a synthetic fact naming only the resolved employee, via Context.add_events_to_memory."""
     memory_service = InMemoryMemoryService()
-    session_service = InMemorySessionService()
-    session = await session_service.create_session(app_name="test", user_id="u1")
-    await session_service.append_event(
-        session,
-        Event(
-            author="user",
-            content=types.Content(role="user", parts=[types.Part(text="What's my balance?")]),
-        ),
-    )
-    invocation_context = InvocationContext(
-        invocation_id="test-invocation",
-        agent=Agent(name="test_agent", model=MODEL_ID),
-        session=session,
-        session_service=session_service,
-        memory_service=memory_service,
-    )
+    callback_context = await _callback_context_with_memory(memory_service)
+    callback_context.state[CURRENT_EMPLOYEE_ID_KEY] = "E1002"
+    callback_context.state[PENDING_PTO_REQUEST_KEY] = {"hours": 24.0}  # must not reach memory
 
-    await _persist_to_memory(Context(invocation_context))
+    await _persist_to_memory(callback_context)
 
-    response = await memory_service.search_memory(app_name="test", user_id="u1", query="balance")
-    assert response.memories
+    response = await memory_service.search_memory(app_name="test", user_id="u1", query="employee")
+    memory_texts = [
+        part.text
+        for memory in response.memories
+        for part in memory.content.parts or []
+        if part.text
+    ]
+    assert any("E1002" in text for text in memory_texts)
+    assert not any("24" in text for text in memory_texts)
+
+
+async def test_persist_to_memory_writes_nothing_without_a_resolved_employee() -> None:
+    memory_service = InMemoryMemoryService()
+    callback_context = await _callback_context_with_memory(memory_service)
+
+    await _persist_to_memory(callback_context)
+
+    response = await memory_service.search_memory(app_name="test", user_id="u1", query="employee")
+    assert not response.memories

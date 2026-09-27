@@ -37,7 +37,7 @@ unchecked step.
 - [ ] 2. Long-term memory (Agent Platform Memory Bank on Agent Engine) -- interface/local stub
       done (`InMemoryMemoryService`); live Agent Engine resource deferred to Module 7 by choice
 - [x] 3. Trimming/summarizing tool output
-- [ ] 4. Sensitive data kept out of context unless needed
+- [x] 4. Sensitive data kept out of context unless needed
 
 ## Module 5 — Evaluation
 - [ ] 1. 30–50 case eval set (happy path, ambiguous, adversarial: prompt injection, salary requests)
@@ -174,6 +174,16 @@ unchecked step.
   rule: a multi-part message that matches one specialist should still transfer once, not be
   treated as ambiguous by virtue of having multiple parts. 5/5 live runs passed after the fix
   (was ~1/3 before); full integration suite (25 tests) still green.
+- M3 router fix #2 (found while testing M4.4 live): a second-session recall question ("the
+  employee I asked about in an earlier conversation") got declined by the router with "I do not
+  have access to conversation history... provide the employee's name or ID" -- the router was
+  treating a missing detail (which employee) as its own problem to solve or refuse over, instead
+  of a topic match to hand to `pto_agent`, which actually can resolve it (via `load_memory`).
+  Same root cause as fix #1: the router's "if the request is unclear, ask" rule didn't
+  distinguish "unclear which specialist" from "specialist will need to resolve a detail."
+  Reworded: "unclear" means only the former; a missing detail like identity is the specialist's
+  job, so transfer on topic match and don't ask for it at the router level. 5/5 live runs passed
+  after the fix; full integration suite (25 tests) still green.
 - M3.1 policy: `search_handbook` (`hr_agent/handbook.py`) is deterministic keyword retrieval
   over `## ` sections (stopwords dropped, title matches weighted 3x, top 3 with nonzero score);
   embeddings add nothing at 8 sections. Contract: `success` / `not_found` (lists available
@@ -272,14 +282,15 @@ unchecked step.
   re-asking. Tool-call order varies run to run (sometimes the model double-checks a recalled ID
   with `get_employee` before using it) -- the test asserts the outcome (`load_memory` used,
   correct `get_pto_balance` call, no `find_employee`), not an exact sequence.
+  `add_session_to_memory`'s full-session write described above is superseded by M4.4 below.
 
 - M4.3 trimming: two distinct ADK mechanisms exist for context growth, confirmed from installed
   `google-adk` 2.9.2 source. Trimming (`google.adk.plugins.context_filter_plugin.ContextFilterPlugin`,
   a `before_model_callback` App-level plugin) drops whole old *invocations* from what's sent to
   the model -- deterministic, free, and it only touches the per-request payload, never
   `session.events`, so it composes cleanly with M4.1 (session state is re-injected into the
-  instruction every turn regardless of trimmed history) and M4.2 (memory writes read
-  `session.events` directly). Summarizing (`App(events_compaction_config=EventsCompactionConfig(...))`
+  instruction every turn regardless of trimmed history) and M4.2/M4.4 (memory writes are
+  independent of the trimmed request either way). Summarizing (`App(events_compaction_config=EventsCompactionConfig(...))`
   with a `BaseEventsSummarizer`) actually condenses old events via an extra LLM call and is still
   `@experimental` in 2.9.2 -- picked trimming as the default for this course-scale project;
   summarizing is the better answer once conversations are long enough that losing older detail
@@ -294,6 +305,26 @@ unchecked step.
   once there's real conversation-length data. `tests/unit/hr_agent/test_context_trimming.py`
   exercises the actual configured plugin instance (not `ContextFilterPlugin`'s internals, which
   are ADK's own) with hand-built `types.Content` sequences -- no model call.
+
+- M4.4 sensitive data out of context: M4.2's `_persist_to_memory` ingested the entire session
+  verbatim into Memory Bank on every turn -- exact PTO dates, hours, and sick balances sitting
+  in a durable, cross-session-searchable store indefinitely, when cross-session recall only
+  ever needed to know which employee the conversation was about. Rewrote it to check
+  `callback_context.state` for the resolved employee ID and, if one is set, persist a single
+  synthetic `Event` naming only that ID via `Context.add_events_to_memory` -- not the turn's
+  real content; nothing is persisted if no employee was resolved (e.g. a holidays-only
+  question). `Context.add_memory` (a direct structured `MemoryEntry` write, no synthetic event
+  needed) would be the cleaner fit for "just this fact," but `InMemoryMemoryService` doesn't
+  implement it -- only `VertexAiMemoryBankService` does (confirmed from source: `add_memory` is
+  `BaseMemoryService`'s default `NotImplementedError`) -- so it isn't usable with the local stub
+  until Module 7's real resource exists; `add_events_to_memory` works with both today and later.
+  Rewriting this surfaced a second router bug while testing live (see M3 router fix #2 above):
+  the router declined a recall-only second-session question outright instead of transferring
+  and letting `pto_agent` resolve identity via memory -- fixed alongside this change.
+  `tests/unit/hr_agent/test_memory.py` asserts the synthetic fact contains the employee ID and
+  never the turn's numeric details (e.g. hours), and that nothing is written when no employee
+  was resolved; `tests/integration/hr_agent/test_memory_live.py` re-ran live (5/5) against the
+  minimized write path with no changes needed to the test itself.
 
 ## Open questions
 
@@ -317,3 +348,9 @@ unchecked step.
 - M4.3: `num_invocations_to_keep=6` is unmeasured; needs real conversation-length/cost data
   (Module 5/8) to tune. `EventsCompactionConfig` is `@experimental` in adk 2.9.2 -- reconfirm its
   stability and whether it's still the summarization answer before relying on it later.
+- M4.4: the router misreading "a detail is missing" as "the request is unclear" has now
+  surfaced twice (M3 router fix #1 and #2) from two unrelated features -- candidate for a
+  Module 5 routing eval category of its own, not just one-off fixes as they're found. The
+  synthetic memory fact is free-text, not structured; `InMemoryMemoryService`'s keyword search
+  found it fine in testing, but recall quality should be re-verified against the real
+  `VertexAiMemoryBankService`'s semantic search once Module 7's resource exists.
