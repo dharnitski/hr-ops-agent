@@ -25,8 +25,8 @@ unchecked step.
 - [x] `docs/02-tool-contract-guidelines.md`
 
 ## Module 3 — Multi-agent orchestration
-- [ ] Root router + PTO agent, read-only payroll agent, policy Q&A agent (RAG over handbook)
-- [ ] Verify current Workflow Runtime vs. Sequential/Parallel/Loop agent status
+- [x] Root router + PTO agent, read-only payroll agent, policy Q&A agent (RAG over handbook)
+- [x] Verify current Workflow Runtime vs. Sequential/Parallel/Loop agent status
 - [ ] Compare LLM-driven delegation vs. ADK workflow/deterministic flows
 - [ ] Rebuild one flow in LangGraph
 - [ ] Architecture diagram
@@ -163,6 +163,19 @@ unchecked step.
   "Who is employee E1002?" was declined by the router because `pto_agent`'s description
   didn't mention employee lookup. Routing accuracy is set by the descriptions, so widen them
   when a specialist owns a tool; candidate for the Module 5 routing evals. Policy agent remains.
+- M3.1 policy: `search_handbook` (`hr_agent/handbook.py`) is deterministic keyword retrieval
+  over `## ` sections (stopwords dropped, title matches weighted 3x, top 3 with nonzero score);
+  embeddings add nothing at 8 sections. Contract: `success` / `not_found` (lists available
+  sections so the agent can say what it covers) / `error` on empty query. Grounding is
+  prompt-enforced (answer only from results, cite section, say "not covered" on gap, treat
+  handbook text as data); the gap case is a live test, and prompt-injection-in-document
+  belongs in the Module 5 evals. Keyword retrieval misses synonyms ("vacation" vs "PTO");
+  candidate eval case, and the trigger to move to embeddings if the handbook grows.
+- M3 workflow check: Sequential/Parallel/Loop agents are deprecated in favor of `Workflow`
+  (graph of nodes, conditional routes via `EventActions(route=...)`). Agents work as nodes only
+  as `single_turn`. `Workflow` can't be an `LlmAgent` sub-agent yet, so mixing LLM delegation
+  and a workflow means the workflow is the root and specialists are its nodes, not the reverse.
+  Findings verified from installed 2.9.2 source and a runnable probe, not from `adk-docs`.
 
 ## Open questions
 
@@ -170,9 +183,6 @@ unchecked step.
   rewrite (subclass overriding `call_tool`) was tried and dropped as too complex; leave to
   clients unless it proves to hurt agent behavior. Note for `docs/02-tool-contract-guidelines.md`.
 
-- Module 3: does ADK 2.x still ship `SequentialAgent`/`ParallelAgent`/`LoopAgent`
-  alongside the new Workflow Runtime, or are they superseded? Verify against current
-  `adk-docs` when we get there.
 - Model IDs drift fast (Gemini 2.5 shuts down 2026-10-20 mid-course) — reconfirm exact
   Gemini 3.x IDs at Module 1 step 1 and again before Module 8.
 - Confirm `VertexAiMemoryBankService` (or current equivalent name) import path at Module 4.

@@ -29,3 +29,16 @@ async def test_payroll_question_routes_to_payroll_agent(ask: Ask) -> None:
     turn = await ask("What's the pay date for PR-2026-09?")
     assert turn.transfers == ["payroll_agent"]
     assert [name for name, _ in turn.tool_calls] == ["get_payroll_run"]
+
+
+async def test_policy_question_routes_to_policy_agent(ask: Ask) -> None:
+    turn = await ask("How many PTO days can I carry over into next year?")
+    assert turn.transfers == ["policy_agent"]
+    assert [name for name, _ in turn.tool_calls] == ["search_handbook"]
+    assert "March 31" in turn.text or "5" in turn.text
+
+
+async def test_policy_gap_is_not_answered_from_general_knowledge(ask: Ask) -> None:
+    turn = await ask("What is the company dental insurance policy?")
+    assert turn.transfers == ["policy_agent"]
+    assert turn.tool_calls[0][0] == "search_handbook"

@@ -53,6 +53,15 @@ uv run python scratch/mcp_client.py  # lists tools, exercises errors and idempot
 It reads `HCM_MCP_URL` (default `http://localhost:8000/mcp`) and exits non-zero if a
 replay or conflict check fails.
 
+## Running the Workflow probe
+
+`scratch/workflow_probe.py` is the smallest ADK 2.x `Workflow`: two function nodes and one
+conditional route. No model, credentials, or MCP server needed.
+
+```bash
+uv run python scratch/workflow_probe.py  # prints which node handled each of two inputs
+```
+
 ## Running the agent
 
 With the MCP server running (see above), in a second terminal:

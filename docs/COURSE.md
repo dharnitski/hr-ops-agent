@@ -29,8 +29,15 @@ this stack moves fast and these notes will drift.
   declarative YAML definitions). Module 3's "ADK workflow vs. LLM-driven delegation"
   comparison should use this rather than assuming only the older
   `SequentialAgent`/`ParallelAgent`/`LoopAgent` primitives. **Open question to verify
-  hands-on in Module 3:** whether those older workflow-agent classes still exist alongside
-  Workflow Runtime or are superseded — check current `adk-docs` at that point.
+  hands-on in Module 3:** resolved against installed `google-adk` 2.9.2 (2026-09-26): the
+  classes still exist in `google.adk.agents` but are `@deprecated` in favor of `Workflow`
+  (removal planned). `from google.adk.workflow import Workflow, node, START`; edges are
+  tuple chains, e.g. `("START", fn, {"route_a": a, "route_b": b})`; a function node
+  routes by returning `Event(output=..., actions=EventActions(route=...))`; run with
+  `Runner(node=workflow, ...)`. Agents can be nodes, but after another node they must be
+  `mode="single_turn"` (chat-mode agents read session history, not node input). A `Workflow`
+  cannot yet be an `LlmAgent` sub-agent, so it can't sit under our router as-is (see
+  `scratch/workflow_probe.py`).
 - **MCP integration import path confirmed:** `from google.adk.tools.mcp_tool.mcp_toolset
   import MCPToolset`. Matches the Module 2 plan as written; also note an in-flight
   compatibility issue between adk-python and `mcp` 2.x SDK — pin versions deliberately in
