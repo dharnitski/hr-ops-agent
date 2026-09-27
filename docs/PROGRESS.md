@@ -27,7 +27,7 @@ unchecked step.
 ## Module 3 — Multi-agent orchestration
 - [x] Root router + PTO agent, read-only payroll agent, policy Q&A agent (RAG over handbook)
 - [x] Verify current Workflow Runtime vs. Sequential/Parallel/Loop agent status
-- [ ] Compare LLM-driven delegation vs. ADK workflow/deterministic flows
+- [x] Compare LLM-driven delegation vs. ADK workflow/deterministic flows
 - [ ] Rebuild one flow in LangGraph
 - [ ] Architecture diagram
 - [ ] `docs/03-adk-vs-langgraph.md`
@@ -176,6 +176,15 @@ unchecked step.
   as `single_turn`. `Workflow` can't be an `LlmAgent` sub-agent yet, so mixing LLM delegation
   and a workflow means the workflow is the root and specialists are its nodes, not the reverse.
   Findings verified from installed 2.9.2 source and a runnable probe, not from `adk-docs`.
+- M3 workflow vs. delegation: `scratch/workflow_router.py` routes with a regex `classify` node
+  (first match wins; policy before pto) to `single_turn` copies of the specialists, plus a
+  static decline node. Saves the router's LLM call and is unit-testable without a model, but
+  misses paraphrases, mixes multi-intent requests (first rule wins), and can't ask a
+  clarifying question. Rule: deterministic routing where intents are enumerable and
+  keyword-detectable; LLM routing for vague or multi-intent input. A hybrid needs the
+  workflow at the root (specialists as nodes), with an LLM classifier node for the ambiguous
+  cases. Specialist `mode` must be `single_turn` as a node, so the copy is made in scratch,
+  not in production agents.
 
 ## Open questions
 
