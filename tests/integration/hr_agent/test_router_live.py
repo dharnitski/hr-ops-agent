@@ -8,7 +8,8 @@ from tests.integration.hr_agent.conftest import Turn
 
 Ask = Callable[[str], Awaitable[Turn]]
 
-pytestmark = pytest.mark.integration
+# Specialists call the MCP server, so it must be up even when a test only checks routing.
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("hcm_server")]
 
 
 async def test_pto_question_routes_to_pto_agent(ask: Ask) -> None:
