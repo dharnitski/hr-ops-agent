@@ -151,6 +151,13 @@ unchecked step.
   message). Idempotency keys are caller-supplied because only the caller knows a call is a
   retry; the model choosing keys is why the server fails loudly on key reuse with different args.
 
+- M3.1 (partial: router + PTO agent): `hr_agent/agent.py` is a toolless router
+  (`sub_agents=[pto_agent]`); specialists in `hr_agent/agents/`. Shared `config.py` (model,
+  MCP URL) and `toolsets.py` (`hcm_toolset`) so later specialists import neither the router nor
+  each other. Specialist `description` is the routing contract. Router declines unmatched
+  requests. Integration `Turn` records `transfer_to_agent` separately from tool calls so
+  trajectory assertions stay about real tools. Payroll and policy agents remain.
+
 ## Open questions
 
 - M2: schema-layer rejections return raw pydantic text with no example ID. A server-side
