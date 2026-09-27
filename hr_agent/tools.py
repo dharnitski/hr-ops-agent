@@ -4,7 +4,7 @@ from typing import Any
 
 from google.adk.tools import ToolContext
 
-from hr_agent.mock_data import EMPLOYEES, HOLIDAYS
+from .mock_data import EMPLOYEES, HOLIDAYS
 
 # Session state key: the employee ID the conversation is currently about. Set by any tool
 # that resolves or confirms one; read by agent instructions via `{current_employee_id?}`.

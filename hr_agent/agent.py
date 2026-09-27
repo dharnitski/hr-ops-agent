@@ -2,10 +2,10 @@ from google.adk.agents import Agent
 from google.adk.apps import App
 from google.adk.plugins.context_filter_plugin import ContextFilterPlugin
 
-from hr_agent.agents.payroll import payroll_agent
-from hr_agent.agents.policy import policy_agent
-from hr_agent.agents.pto import pto_agent
-from hr_agent.config import MODEL_ID
+from .agents.payroll import payroll_agent
+from .agents.policy import policy_agent
+from .agents.pto import pto_agent
+from .config import MODEL_ID
 
 # Module 4.3: without this, every turn resends the full conversation -- every past tool call
 # and result -- to the model forever. Keeps the last 6 user-initiated invocations (roughly a

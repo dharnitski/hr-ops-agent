@@ -5,9 +5,9 @@ from google.adk.events import Event
 from google.adk.tools import BaseTool, ToolContext, load_memory
 from google.genai import types
 
-from hr_agent.config import MODEL_ID
-from hr_agent.tools import CURRENT_EMPLOYEE_ID_KEY, find_employee, get_pto_balance, list_holidays
-from hr_agent.toolsets import hcm_toolset
+from ..config import MODEL_ID
+from ..tools import CURRENT_EMPLOYEE_ID_KEY, find_employee, get_pto_balance, list_holidays
+from ..toolsets import hcm_toolset
 
 # Session state key: the most recently submitted PTO request this conversation made, so the
 # agent (and Module 6's confirmation step) can refer back to it without the user repeating
@@ -30,8 +30,9 @@ Rules:
   given and no employee is in context above, ask for one. If one is in context, use it — but
   if the user names a different person, resolve and use that person instead; they become the
   new employee in context.
-- If a tool returns status "error", tell the user plainly what went wrong. Do not retry with
-  made-up input.
+- If a tool returns status "error", tell the user plainly what went wrong and stop -- call it
+  once per request. Do not retry with made-up input, and do not repeat the identical call
+  again hoping for a different result.
 - If a question needs several lookups, make each one and answer every part.
 - To submit PTO, use submit_pto_request with a fresh unique idempotency_key (e.g.
   "pto-" plus a random 8-character string) and ISO dates. Reuse the key only when retrying

@@ -1,0 +1,524 @@
+{
+  "eval_set_id": "hr_ops_happy_path",
+  "name": "HR Ops happy path",
+  "description": "Straightforward requests each specialist should resolve cleanly: PTO/sick balances, holidays, employee lookup, PTO submission, payroll run status, policy Q&A.",
+  "eval_cases": [
+    {
+      "eval_id": "happy_pto_balance_by_id",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "How much PTO does E1002 have left?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Bob Smith (E1002) has 64.5 hours of PTO and 24.0 hours of sick leave remaining."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "get_pto_balance",
+                "args": {
+                  "employee_id": "E1002"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_pto_balance_by_name_single_match",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "How much vacation time does Carla Gomez have?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Carla Gomez (E1003) has 0.0 hours of PTO remaining."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "find_employee",
+                "args": {
+                  "name": "Carla Gomez"
+                }
+              },
+              {
+                "name": "get_pto_balance",
+                "args": {
+                  "employee_id": "E1003"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_sick_balance_lookup_by_name",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "What's Dev Patel's sick leave balance?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Dev Patel (E1004) has 40.0 hours of sick leave and 120.0 hours of PTO remaining."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "find_employee",
+                "args": {
+                  "name": "Dev Patel"
+                }
+              },
+              {
+                "name": "get_pto_balance",
+                "args": {
+                  "employee_id": "E1004"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_holiday_list_2026",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "What are the company holidays in 2026?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "2026 company holidays: New Year's Day (Jan 1), Martin Luther King Jr. Day (Jan 19), Memorial Day (May 25), Juneteenth (Jun 19), Independence Day observed (Jul 3), Labor Day (Sep 7), Thanksgiving Day (Nov 26), Day after Thanksgiving (Nov 27), and Christmas Day (Dec 25)."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "list_holidays",
+                "args": {
+                  "year": 2026
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_holiday_specific_date_check",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Is September 7, 2026 a company holiday?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Yes, September 7, 2026 is Labor Day, a company holiday."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "list_holidays",
+                "args": {
+                  "year": 2026
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_holiday_christmas_check",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Is December 25, 2026 a holiday?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Yes, December 25, 2026 is Christmas Day, a company holiday."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "list_holidays",
+                "args": {
+                  "year": 2026
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_employee_profile_lookup_by_id",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Who is employee E1002?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "E1002 is Bob Smith, Software Engineer."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "get_employee",
+                "args": {
+                  "employee_id": "E1002"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_submit_pto_request_by_name",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Submit a PTO request for Bob Smith from 2026-09-14 to 2026-09-16."
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Submitted a PTO request for Bob Smith (E1002) from 2026-09-14 to 2026-09-16 (24.0 hours). It is now pending approval."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "find_employee",
+                "args": {
+                  "name": "Bob Smith"
+                }
+              },
+              {
+                "name": "submit_pto_request",
+                "args": {
+                  "employee_id": "E1002",
+                  "start_date": "2026-09-14",
+                  "end_date": "2026-09-16"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_submit_pto_request_by_id",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Submit a PTO request for E1004 from 2026-11-30 to 2026-12-02."
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Submitted a PTO request for E1004 from 2026-11-30 to 2026-12-02 (24.0 hours). It is now pending approval."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "submit_pto_request",
+                "args": {
+                  "employee_id": "E1004",
+                  "start_date": "2026-11-30",
+                  "end_date": "2026-12-02"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_payroll_lookup_paid",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "What's the status of payroll run PR-2026-08?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Payroll run PR-2026-08 (Aug 1-31, 2026) is paid; pay date 2026-09-04, 5 employees, total gross $61,250.00."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "get_payroll_run",
+                "args": {
+                  "run_id": "PR-2026-08"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_payroll_lookup_draft",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "When is the PR-2026-09 payroll run scheduled to pay out?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Payroll run PR-2026-09 is in draft status; the scheduled pay date is 2026-10-02."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "get_payroll_run",
+                "args": {
+                  "run_id": "PR-2026-09"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_policy_pto_carryover",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "What's our PTO carryover policy?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Per the PTO carryover section of the handbook: up to 5 unused PTO days carry over into the next calendar year. Carried-over days expire on March 31 of the new year, and unused days above the 5-day cap are forfeited on December 31."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "search_handbook",
+                "args": {
+                  "query": "PTO carryover"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_policy_remote_work",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Can I work remotely?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Per the Remote work section of the handbook: employees may work remotely up to 3 days per week with manager agreement. Working from another country for more than 14 days per year requires HR approval for tax and legal reasons."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "search_handbook",
+                "args": {
+                  "query": "remote work policy"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_policy_parental_leave",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "How much parental leave do we offer?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Per the Parental leave section of the handbook: birth and adoptive parents receive 16 weeks of paid parental leave, taken within 12 months of the child's arrival, in one block or split into two blocks."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "search_handbook",
+                "args": {
+                  "query": "parental leave"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "happy_policy_expense_reimbursement",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "How do I get reimbursed for a work expense?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Per the Expense reimbursement section of the handbook: business expenses under 75 USD need a receipt photo; larger expenses need an itemized receipt and manager approval. Claims are due within 30 days and are paid with the next payroll run."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "search_handbook",
+                "args": {
+                  "query": "expense reimbursement"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

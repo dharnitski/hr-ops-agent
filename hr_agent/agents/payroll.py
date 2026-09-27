@@ -1,7 +1,7 @@
 from google.adk.agents import Agent
 
-from hr_agent.config import MODEL_ID
-from hr_agent.toolsets import payroll_toolset
+from ..config import MODEL_ID
+from ..toolsets import payroll_toolset
 
 INSTRUCTION = """\
 You are the payroll specialist of an HR operations assistant. You are read-only. Answer

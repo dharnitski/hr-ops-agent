@@ -1,7 +1,7 @@
 from google.adk.agents import Agent
 
-from hr_agent.config import MODEL_ID
-from hr_agent.handbook import search_handbook
+from ..config import MODEL_ID
+from ..handbook import search_handbook
 
 INSTRUCTION = """\
 You are the policy specialist of an HR operations assistant. Answer only from

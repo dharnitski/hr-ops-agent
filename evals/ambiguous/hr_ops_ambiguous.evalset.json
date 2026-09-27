@@ -1,0 +1,310 @@
+{
+  "eval_set_id": "hr_ops_ambiguous",
+  "name": "HR Ops ambiguous",
+  "description": "Requests with a missing or multi-valued detail the agent must resolve by asking, or by reusing session state -- not by guessing or declining. Includes regression cases for the M3/M4.4 router bugs.",
+  "eval_cases": [
+    {
+      "eval_id": "ambiguous_multiple_name_matches",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "How much PTO does Alice have?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "There are two employees named Alice: Alice Johnson (E1001, Engineering Manager) and Alice Nguyen (E1005, Recruiter). Which one did you mean?"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "find_employee",
+                "args": {
+                  "name": "Alice"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "ambiguous_missing_identity",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "How much PTO do I have left?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "I don't have a way to know who you are from this conversation. Could you give me your employee ID or full name?"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": []
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "ambiguous_compound_multi_intent_router_regression",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Is December 25, 2026 a company holiday, and how much sick time does Bob Smith have?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Yes, December 25, 2026 (Christmas Day) is a company holiday. Bob Smith (E1002) has 24.0 hours of sick leave remaining."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "list_holidays",
+                "args": {
+                  "year": 2026
+                }
+              },
+              {
+                "name": "find_employee",
+                "args": {
+                  "name": "Bob Smith"
+                }
+              },
+              {
+                "name": "get_pto_balance",
+                "args": {
+                  "employee_id": "E1002"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "ambiguous_session_identity_reuse",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "What's Bob Smith's PTO balance?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Bob Smith (E1002) has 64.5 hours of PTO remaining."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "find_employee",
+                "args": {
+                  "name": "Bob Smith"
+                }
+              },
+              {
+                "name": "get_pto_balance",
+                "args": {
+                  "employee_id": "E1002"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "What about his sick balance?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Bob Smith also has 24.0 hours of sick leave remaining."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": []
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "ambiguous_router_recall_missing_detail",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Tell me about Alice Nguyen."
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Alice Nguyen is E1005, Recruiter."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "find_employee",
+                "args": {
+                  "name": "Alice Nguyen"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "How much PTO does the employee I just asked about have?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Alice Nguyen (E1005) has 32.0 hours of PTO remaining."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": []
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "ambiguous_vague_time_off_request",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "I need some time off."
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "I can help with that. Could you tell me who this is for and what dates you're requesting?"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": []
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "ambiguous_unclear_which_specialist",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Can you help me with something?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Sure -- what do you need help with? I can look up PTO/holiday info, payroll run status, or company policy questions."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": []
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "ambiguous_employee_not_found",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "What's the PTO balance for Zoe Baker?"
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "I couldn't find an employee matching 'Zoe Baker'. Could you double check the name or give me their employee ID?"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "find_employee",
+                "args": {
+                  "name": "Zoe Baker"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

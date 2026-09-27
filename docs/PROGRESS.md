@@ -40,7 +40,7 @@ unchecked step.
 - [x] 4. Sensitive data kept out of context unless needed
 
 ## Module 5 — Evaluation
-- [ ] 1. 30–50 case eval set (happy path, ambiguous, adversarial: prompt injection, salary requests)
+- [x] 1. 30–50 case eval set (happy path, ambiguous, adversarial: prompt injection, salary requests)
 - [ ] 2. Trajectory + response evals via `adk eval`
 - [ ] 3. LLM-as-judge rubric
 - [ ] 4. Launch bar (task success, zero unauthorized access, p95 latency, cost/task)
@@ -326,6 +326,138 @@ unchecked step.
   was resolved; `tests/integration/hr_agent/test_memory_live.py` re-ran live (5/5) against the
   minimized write path with no changes needed to the test itself.
 
+- M5.1 eval set: confirmed from installed `google-adk` 2.9.2 source (not docs, since this is the
+  first module-touch of `adk eval`): `EvalCase`/`EvalSet` are pydantic (`.evalset.json`), each
+  `Invocation` carries `user_content`, `final_response`, and `intermediate_data.tool_uses`
+  (expected `FunctionCall`s). `adk eval` defaults to two metrics: `tool_trajectory_avg_score`
+  (threshold 1.0) and `response_match_score` (threshold 0.8, ROUGE-like). A `test_config.json`
+  next to the evalset file overrides criteria -- but `_resolve_eval_config_file_path` in
+  `cli_tools_click.py` only auto-picks it up when exactly one evalset file is passed per `adk
+  eval` invocation, so each tier below must be run (or CI-gated) as its own command, or with
+  `--config_file_path` passed explicitly for a multi-file run.
+  33 cases across `evals/{happy_path,ambiguous,adversarial}/`, one `.evalset.json` +
+  `test_config.json` per directory so each risk tier gets its own trajectory-matching strictness:
+  - `happy_path` (15) / `ambiguous` (8): `ANY_ORDER` + `ignore_args: true`. Tolerates legitimate
+    extra calls (e.g. the model double-checking a recalled ID, per M4.2's live-run note) and calls
+    happening out of causal order between independent sub-questions (the M3-fix-#1 compound-query
+    regression case has no real ordering constraint between its two lookups).
+  - `adversarial` (10): `EXACT` + `ignore_args: true`. Order is naturally fixed in every case here
+    (identity resolution always precedes the write), so `EXACT`'s real job is catching *extra*
+    tool calls -- e.g. a silent retry with corrected dates after an `invalid_dates` error, or a
+    bulk `get_pto_balance` sweep triggered by the prompt-injection case -- which `ANY_ORDER`/
+    `IN_ORDER` would not flag since they only require presence, not absence of extras.
+  - `ignore_args: true` everywhere: `submit_pto_request`'s `idempotency_key` is model-generated
+    and unpredictable, so exact-arg matching would fail cases it shouldn't. Argument-level
+    correctness (right employee ID, right dates, right hours) is pushed onto `final_response`
+    text via `response_match_score` instead. `response_match_score` threshold set to 0.3
+    (down from the CLI default 0.8) as an unmeasured starting floor, same pattern as M4.3's
+    `num_invocations_to_keep` -- no live run has happened yet to calibrate ROUGE similarity
+    against this project's actual response phrasing.
+  - `transfer_to_agent` is deliberately never in an expected trajectory: it's a real tool call
+    (confirmed in `google/adk/tools/transfer_to_agent_tool.py`) but its `transfer_reason` arg is
+    freeform model text, and `EXACT`/`IN_ORDER`/`ANY_ORDER` all do per-call dict equality on args
+    that appear in the expected list even when `ignore_args` is off for a *different* call in the
+    same criterion -- moot here since `ignore_args: true` is set everywhere, but the real reason
+    to omit it is that a specialist's real tool call already implies the transfer happened, so
+    asserting the leaf tool is sufficient and doesn't require guessing `transfer_reason` text.
+  - Cross-session recall (M4.4's `load_memory` path) isn't exercised here: an `EvalCase`'s
+    `conversation` is one session, and depending on the eval runner reusing one `user_id`'s
+    `InMemoryMemoryService` state across separate `EvalCase`s within a run was judged too fragile
+    to build a regression case on. `ambiguous_router_recall_missing_detail` instead proxies the
+    same router bug (a missing detail treated as "unclear" instead of the specialist's job) with
+    a same-session two-turn conversation using resolved session state, not memory recall; the
+    real cross-session path stays covered by the live integration test
+    (`tests/integration/hr_agent/test_memory_live.py`).
+  - No caller-identity/authorization cases (e.g. "submit PTO for a coworker without asking them",
+    "look up a coworker's balance you have no business seeing"): the tool layer has no such
+    enforcement yet (tracked since M1.8/M2.4, hard gates deferred to Module 6), so an eval case
+    asserting a refusal there would just encode a known, accepted gap as a bug. Candidate for a
+    Module 6 eval category once permission boundaries exist server-side.
+  - Salary-request cases assert an empty expected tool trajectory and a declining
+    `final_response`, not a tool call: `get_payroll_run` returns aggregates only (confirmed,
+    `mcp_server/handlers.py:136`) -- there is no tool that could answer "what does X earn", so the
+    only thing worth checking is that the model doesn't hallucinate a number or misuse an
+    aggregate tool to fake one.
+  - All numeric/date facts in golden responses (PTO/sick hours, working-day counts across
+    2026-09/-10/-11/-12, which days are holidays) were hand-computed against `mock_data.py` and
+    verified against the known Labor Day (Mon)/Thanksgiving (Thu) anchors, not guessed.
+  - All 33 cases now pass live (`adk eval hr_agent evals/<tier>/*.evalset.json`, one tier per
+    invocation, gemini-3.5-flash-lite). Getting there surfaced four real bugs, none of them in
+    the agent itself:
+    1. **`adk eval`'s loader was incompatible with this package**, unrelated to the eval cases.
+       `cli_eval._get_agent_module` re-execs `hr_agent/__init__.py` under a synthetic top-level
+       module name `"agent"` (confirmed from source, not docs). `hr_agent/agent.py` and
+       `hr_agent/agents/*.py` used absolute `from hr_agent.X import Y` imports, so resolving them
+       during that synthetic exec forced Python to *also* import the real `hr_agent` package
+       (importable because the repo root is on `sys.path`), fully constructing `root_agent` a
+       second time with the same singleton `pto_agent`/`payroll_agent`/`policy_agent` objects --
+       crashing with a pydantic "already has a parent agent" error on the second `Agent(...)`
+       construction. Reproduced minimally outside `adk eval` to confirm before touching code.
+       Fixed by switching those intra-package imports to relative (parent-relative `..` in
+       `hr_agent/agents/*.py`, sibling `.` in `hr_agent/agent.py`/`toolsets.py`/`tools.py`), which
+       makes the whole module graph resolve consistently under whichever top-level name it's
+       loaded as -- real `hr_agent` for tests/`mcp_server`, synthetic `agent` for `adk eval`.
+       This conflicts with the project's `TID252` ("prefer absolute imports") convention, so
+       added a scoped `pyproject.toml` per-file-ignore for `hr_agent/agents/**` with a comment
+       explaining why, rather than weakening the rule repo-wide. `adk web`/`adk run` were
+       apparently never affected (different, non-synthetic loading path) -- this bug was latent
+       since M3 and only surfaced now because `adk eval` had never been invoked before M5.1.
+       145 unit tests, `ruff`, and `ty` all still green after the change.
+    2. **`transfer_to_agent` is a real tool call** (confirmed in
+       `google/adk/tools/transfer_to_agent_tool.py`) and always fires as the first hop into a
+       specialist. The adversarial tier's `EXACT` match_type fails on any actual call *not* in
+       the expected list -- so every adversarial case that expected a specialist's tool call was
+       failing outright (score 0.0) because `transfer_to_agent` was always an unexpected extra.
+       Fixed by adding it explicitly (name only, via a `transfer(agent_name)` helper; args are
+       ignored anyway since `ignore_args: true`) as the first expected call in every case that
+       reaches a specialist -- and *not* repeating it on a later turn that stays with the same
+       specialist (confirmed from the live sessions: transfer is sticky, a same-topic follow-up
+       turn has zero tool calls if the answer's already known, or just the leaf tool call if not).
+    3. **Two golden `final_response`s for the policy cases were lazy `"... "` placeholders**
+       instead of real content, so `response_match_score` was correctly near-zero against them
+       regardless of any threshold -- not a threshold-calibration problem, a content gap. Fixed
+       by writing out the actual handbook text (this project's own fixture data, not third-party
+       material) for all four policy happy-path cases and the adversarial injection case.
+    4. **`ambiguous_router_recall_missing_detail` turn 2 over-specified the expected trajectory**:
+       it required a fresh `get_pto_balance` call, but the model correctly answered from what
+       turn 1's tool result already gave it, with zero new tool calls -- the same pattern already
+       handled correctly in the sibling `ambiguous_session_identity_reuse` case. Fixed by
+       expecting `[]` for that turn too; the real check for this regression is response content,
+       not trajectory, and both cases now say so implicitly by leaving it empty.
+    Also found, not fixed (both infrastructure, not case bugs, logged for M5.5's CI-gate design):
+    running a full tier as one `adk eval` invocation occasionally hits `HTTPSConnectionPool
+    (oauth2.googleapis.com): Read timed out` (ADC token refresh contention under concurrent
+    inference) and transient MCP "Connection closed" (single uvicorn process under concurrent
+    sessions) -- ADK's own retry logic absorbed the latter on a subsequent run, but not always;
+    a CI gate should expect occasional retries rather than treating one red run as conclusive.
+    Dropped `response_match_score` from the adversarial tier's `test_config.json` entirely
+    (kept for happy_path/ambiguous): its ROUGE-style scoring gave near-zero on some clearly
+    correct refusals (e.g. two valid but lexically dissimilar salary-refusal phrasings scored
+    0.13) -- no threshold rescues that without also passing near-empty responses elsewhere, so
+    for this tier `tool_trajectory_avg_score` (now real, via finding 2) is the only gate until
+    an LLM-as-judge exists (M5.3).
+
+- M5.1 flake fix: `adversarial_idempotency_conflict_same_key_diff_args` failed on a later live
+  re-run (1 of 2), not caught by the checks above -- turn 2 called `submit_pto_request` *twice*
+  with identical args (same reused key, same new dates) before reporting the conflict, tripping
+  `EXACT`'s call-count check. Confirmed benign (idempotent key+args, no double-write) but real
+  model non-determinism, reproduced then re-verified fixed (3/3 clean live re-runs of that case).
+  Considered three fixes: loosen just this case's match_type (narrow, weakens the "no extra
+  calls" adversarial property further), tighten `pto_agent`'s prompt (chosen), or accept as
+  documented flakiness. Chose the prompt fix: `hr_agent/agents/pto.py`'s "tool returns
+  status error" rule only said not to retry with made-up input, leaving a same-args retry
+  unaddressed; added "do not repeat the identical call again hoping for a different result."
+  This is a real behavior improvement independent of the eval (fewer redundant round-trips on
+  any business-logic error, not just idempotency conflicts), not just a fix aimed at making a
+  test green. Left the M2.3-established "fix the argument format once" retry-on-schema-
+  rejection rule untouched -- that's a different, intentional one-retry case (malformed
+  input), not the same-args business-error retry this rule targets.
+  Underlying gap not addressed: dropping `response_match_score` from the adversarial tier
+  (finding above) means `tool_trajectory_avg_score` with `ignore_args: true` can't distinguish
+  "retried with identical args" from "silently retried with a *different* key and reported false
+  success" -- both look like just an extra `submit_pto_request` call. Still open; the honest fix
+  is the same one already deferred to M5.3 (LLM-as-judge / rubrics), not another prompt patch.
+
 ## Open questions
 
 - M2: schema-layer rejections return raw pydantic text with no example ID. A server-side
@@ -348,6 +480,13 @@ unchecked step.
 - M4.3: `num_invocations_to_keep=6` is unmeasured; needs real conversation-length/cost data
   (Module 5/8) to tune. `EventsCompactionConfig` is `@experimental` in adk 2.9.2 -- reconfirm its
   stability and whether it's still the summarization answer before relying on it later.
+- M5.1: all 33 cases pass live now (see decision above), but on a single run each with
+  `gemini-3.5-flash-lite` -- not repeated for flakiness beyond what surfaced incidentally
+  (the OAuth/MCP transience). `response_match_score` thresholds (0.3 for happy_path/ambiguous)
+  are still calibrated from one run's worth of scores, not a distribution. Before wiring
+  `adk eval` into CI (M5.5): decide how to handle the occasional OAuth-timeout/MCP-connection-
+  closed retries (accept flaky-and-retry, or make the MCP server more concurrency-tolerant),
+  and re-run a few times to see whether any case is borderline rather than solidly passing.
 - M4.4: the router misreading "a detail is missing" as "the request is unclear" has now
   surfaced twice (M3 router fix #1 and #2) from two unrelated features -- candidate for a
   Module 5 routing eval category of its own, not just one-off fixes as they're found. The

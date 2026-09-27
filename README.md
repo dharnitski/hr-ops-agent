@@ -77,7 +77,13 @@ Prompts to try (mock data: employees E1001–E1005, Bob Smith is E1002; payroll 
 uv run ruff check .                  # lint
 uv run pytest                        # unit tests (tests/unit)
 uv run pytest tests/integration     # integration tests (need hr_agent/.env)
-uv run adk eval hr_agent evals/      # eval gate
+
+# eval gate (needs the MCP server running, see above): one evalset file per invocation so
+# each risk tier's test_config.json is picked up (adk eval only auto-resolves it for a
+# single-file run)
+uv run adk eval hr_agent evals/happy_path/hr_ops_happy_path.evalset.json
+uv run adk eval hr_agent evals/ambiguous/hr_ops_ambiguous.evalset.json
+uv run adk eval hr_agent evals/adversarial/hr_ops_adversarial.evalset.json
 ```
 
 ## Scratch

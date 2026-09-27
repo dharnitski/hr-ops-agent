@@ -1,7 +1,7 @@
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 
-from hr_agent.config import HCM_MCP_URL
+from .config import HCM_MCP_URL
 
 # Params are shared; each toolset still opens its own MCP session (one extra connection per
 # specialist is the price of independent tool_filters).
