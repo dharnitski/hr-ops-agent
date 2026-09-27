@@ -9,21 +9,47 @@ import functools
 import os
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+from hr_agent import tools as hr_tools
 from hr_agent.agents.pto import INSTRUCTION
 from hr_agent.config import DEFAULT_MODEL_ID
-from hr_agent.tools import find_employee, get_pto_balance, list_holidays
 
 load_dotenv(Path(__file__).parent.parent / "hr_agent" / ".env")
 
 MAX_STEPS = 6
 MODEL_ID = os.environ.get("MODEL_ID", DEFAULT_MODEL_ID)
-TOOLS = {fn.__name__: fn for fn in (find_employee, get_pto_balance, list_holidays)}
+
+# find_employee/get_pto_balance take an ADK ToolContext to remember the current employee across
+# turns (Module 4); this loop has no ADK session, so it keeps that same state itself in a plain
+# dict and wraps the tools with a duck-typed stand-in, matching only the `.state` attribute the
+# tools actually use. Wrapping (not calling hr_tools directly) also keeps the declared schema
+# genai builds from these functions free of the tool_context parameter.
+_session_state: dict[str, Any] = {}
+_tool_context = SimpleNamespace(state=_session_state)
+
+
+def find_employee(name: str) -> dict[str, Any]:
+    return hr_tools.find_employee(name, _tool_context)  # ty: ignore[invalid-argument-type]
+
+
+def get_pto_balance(employee_id: str) -> dict[str, Any]:
+    return hr_tools.get_pto_balance(employee_id, _tool_context)  # ty: ignore[invalid-argument-type]
+
+
+# The docstring is the tool contract genai's schema builder reads (see hr_agent/tools.py); copy
+# it by reference so the two never drift apart. Not functools.wraps: that also sets __wrapped__,
+# which inspect.signature() follows by default, unwrapping straight back to the original
+# function and its tool_context parameter -- the exact schema problem these wrappers avoid.
+find_employee.__doc__ = hr_tools.find_employee.__doc__
+get_pto_balance.__doc__ = hr_tools.get_pto_balance.__doc__
+
+TOOLS = {fn.__name__: fn for fn in (find_employee, get_pto_balance, hr_tools.list_holidays)}
 
 config = types.GenerateContentConfig(
     system_instruction=INSTRUCTION,

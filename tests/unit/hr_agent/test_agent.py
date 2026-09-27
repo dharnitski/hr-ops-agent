@@ -33,6 +33,17 @@ def test_pto_instruction_forbids_guessing_ids() -> None:
     assert "error" in instruction
 
 
+def test_pto_instruction_exposes_session_state() -> None:
+    instruction = pto_agent.instruction
+    assert isinstance(instruction, str)
+    assert "{current_employee_id?}" in instruction
+    assert "{pending_pto_request?}" in instruction
+
+
+def test_pto_agent_tracks_mcp_results_after_each_tool_call() -> None:
+    assert pto_agent.after_tool_callback is not None
+
+
 def test_hcm_toolset_exposes_only_pto_tools() -> None:
     assert hcm_toolset.tool_filter == ["get_employee", "submit_pto_request"]
 

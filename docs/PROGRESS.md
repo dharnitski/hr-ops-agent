@@ -33,7 +33,7 @@ unchecked step.
 - [x] 6. `docs/03-adk-vs-langgraph.md`
 
 ## Module 4 — Memory, state, context engineering
-- [ ] 1. Session state (current employee, pending actions)
+- [x] 1. Session state (current employee, pending actions)
 - [ ] 2. Long-term memory (Agent Platform Memory Bank on Agent Engine)
 - [ ] 3. Trimming/summarizing tool output
 - [ ] 4. Sensitive data kept out of context unless needed
@@ -204,6 +204,28 @@ unchecked step.
   framework is used. Flags re-verifying before Module 8: whether `Workflow` can be an
   `LlmAgent` sub-agent yet, and `create_agent`'s API stability.
 
+- M4.1 session state: `current_employee_id` and `pending_pto_request` are session-scoped
+  (`tool_context.state`), gone once the session ends -- the boundary to contrast against M4.2's
+  cross-session memory bank. `find_employee`/`get_pto_balance` (local tools) take a
+  `tool_context: ToolContext` param and write state directly; ADK detects the param by type
+  (not name) and excludes it from the schema the model sees. `get_employee`/`submit_pto_request`
+  are MCP tools and can't take that param, so `pto_agent` has an `after_tool_callback`
+  (`_track_mcp_results`) that reads every tool call's result and writes state from the MCP
+  wire shape (`structuredContent.result`, `isError`) -- returning `None` leaves the model-visible
+  response untouched, so this stays purely observational. Both keys surface to the model via
+  `{current_employee_id?}` / `{pending_pto_request?}` instruction templating (the `?` makes an
+  unset key render as empty instead of raising). Reusing a person's remembered ID happens by
+  prompt instruction, not code -- there's no enforcement that the model actually uses it.
+  Live-model test found `after_tool_callback`'s `tool_response` can arrive as `None` even though
+  ADK's own `AfterToolCallback` type alias declares it always a dict (docstring says
+  long-running/deferred tools can reach the callback before a result exists); the callback
+  guards with `isinstance(tool_response, dict)`, not just `is not None`, in case a tool ever
+  returns something else non-dict. Broke `scratch/react_from_scratch.py`, which called
+  `find_employee`/`get_pto_balance` directly with no ADK session -- fixed by giving scratch its
+  own plain-dict state and thin wrapper functions (duck-typed stand-in for `ToolContext`, not a
+  real one), keeping the "no ADK" scratch exercise honest instead of pulling in ADK's session
+  machinery just to satisfy the type.
+
 ## Open questions
 
 - M2: schema-layer rejections return raw pydantic text with no example ID. A server-side
@@ -213,3 +235,6 @@ unchecked step.
 - Model IDs drift fast (Gemini 2.5 shuts down 2026-10-20 mid-course) — reconfirm exact
   Gemini 3.x IDs at Module 1 step 1 and again before Module 8.
 - Confirm `VertexAiMemoryBankService` (or current equivalent name) import path at Module 4.
+- M4.1: nothing enforces that the model actually uses `current_employee_id`/`pending_pto_request`
+  instead of re-asking or re-submitting -- it's a prompt rule, not a guardrail. Candidate for a
+  Module 5 eval case (assert the second turn of a conversation doesn't repeat a resolved ID).
