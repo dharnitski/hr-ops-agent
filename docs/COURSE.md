@@ -72,6 +72,11 @@ symbols/model IDs/URLs to type. Adjustments are folded into the relevant steps b
 it matters (env var choices, model IDs, import paths).
 
 ---
+- **LangGraph 1.x (checked 2026-09-26):** `langgraph.prebuilt.create_react_agent` is deprecated
+  (removal in V2.0); use `from langchain.agents import create_agent` (`system_prompt=`, not
+  `prompt=`). Gemini on Vertex: `langchain_google_genai.ChatGoogleGenerativeAI(model=...,
+  vertexai=True, location="global")`. Installed: langgraph 1.2.12, langchain 1.4.2,
+  langchain-google-genai 4.4.0 (dev group; comparison only).
 
 ## Module 1 — Foundations and first ADK agent
 

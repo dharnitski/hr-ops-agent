@@ -28,7 +28,7 @@ unchecked step.
 - [x] Root router + PTO agent, read-only payroll agent, policy Q&A agent (RAG over handbook)
 - [x] Verify current Workflow Runtime vs. Sequential/Parallel/Loop agent status
 - [x] Compare LLM-driven delegation vs. ADK workflow/deterministic flows
-- [ ] Rebuild one flow in LangGraph
+- [x] Rebuild one flow in LangGraph
 - [ ] Architecture diagram
 - [ ] `docs/03-adk-vs-langgraph.md`
 
@@ -185,6 +185,14 @@ unchecked step.
   workflow at the root (specialists as nodes), with an LLM classifier node for the ambiguous
   cases. Specialist `mode` must be `single_turn` as a node, so the copy is made in scratch,
   not in production agents.
+- M3 LangGraph: `scratch/langgraph_router.py` rebuilds the policy path (classify -> policy |
+  fallback), reusing the ADK rules, policy instruction and `search_handbook`. Same routing
+  and answers. Differences: state is an explicit `TypedDict` you merge into (vs. ADK events and
+  session state); routing is a function returning a node name plus a path map (vs.
+  `EventActions(route=...)`); the model and tool wiring is more glue (chat-model class, tool
+  from docstring, `create_agent`), and agents nest as compiled subgraphs invoked inside a node.
+  `create_react_agent` is deprecated for `langchain.agents.create_agent`. ty can't check
+  `StateGraph(State)`, so it carries an ignore. Deps live in the dev group only.
 
 ## Open questions
 
