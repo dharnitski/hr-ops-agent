@@ -1,6 +1,7 @@
 from google.adk.agents import Agent
 
 from hr_agent.agents.payroll import payroll_agent
+from hr_agent.agents.policy import policy_agent
 from hr_agent.agents.pto import pto_agent
 from hr_agent.config import MODEL_ID
 
@@ -18,5 +19,5 @@ root_agent = Agent(
     model=MODEL_ID,
     description="Routes HR requests to specialist agents.",
     instruction=INSTRUCTION,
-    sub_agents=[pto_agent, payroll_agent],
+    sub_agents=[pto_agent, payroll_agent, policy_agent],
 )

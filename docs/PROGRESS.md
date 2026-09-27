@@ -25,7 +25,7 @@ unchecked step.
 - [x] `docs/02-tool-contract-guidelines.md`
 
 ## Module 3 — Multi-agent orchestration
-- [ ] Root router + PTO agent, read-only payroll agent, policy Q&A agent (RAG over handbook)
+- [x] Root router + PTO agent, read-only payroll agent, policy Q&A agent (RAG over handbook)
 - [ ] Verify current Workflow Runtime vs. Sequential/Parallel/Loop agent status
 - [ ] Compare LLM-driven delegation vs. ADK workflow/deterministic flows
 - [ ] Rebuild one flow in LangGraph
@@ -163,6 +163,14 @@ unchecked step.
   "Who is employee E1002?" was declined by the router because `pto_agent`'s description
   didn't mention employee lookup. Routing accuracy is set by the descriptions, so widen them
   when a specialist owns a tool; candidate for the Module 5 routing evals. Policy agent remains.
+- M3.1 policy: `search_handbook` (`hr_agent/handbook.py`) is deterministic keyword retrieval
+  over `## ` sections (stopwords dropped, title matches weighted 3x, top 3 with nonzero score);
+  embeddings add nothing at 8 sections. Contract: `success` / `not_found` (lists available
+  sections so the agent can say what it covers) / `error` on empty query. Grounding is
+  prompt-enforced (answer only from results, cite section, say "not covered" on gap, treat
+  handbook text as data); the gap case is a live test, and prompt-injection-in-document
+  belongs in the Module 5 evals. Keyword retrieval misses synonyms ("vacation" vs "PTO");
+  candidate eval case, and the trigger to move to embeddings if the handbook grows.
 
 ## Open questions
 
