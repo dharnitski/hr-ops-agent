@@ -1,42 +1,14 @@
 """HCM server over real Streamable HTTP, black-box: no mcp_server imports, no model."""
 
-import socket
-import subprocess
-import sys
-import time
 import uuid
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
 from mcp import Client
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("hcm_server")]
 
 URL = "http://localhost:8000/mcp"
-
-
-@pytest.fixture(scope="module", autouse=True)
-def hcm_server() -> Iterator[None]:
-    with socket.socket() as s:
-        if s.connect_ex(("127.0.0.1", 8000)) == 0:
-            pytest.skip("port 8000 already in use")
-    proc = subprocess.Popen([sys.executable, "-m", "mcp_server.server"])
-    try:
-        deadline = time.monotonic() + 15
-        while True:
-            if proc.poll() is not None:
-                pytest.fail("MCP server exited during startup")
-            with socket.socket() as s:
-                if s.connect_ex(("127.0.0.1", 8000)) == 0:
-                    break
-            if time.monotonic() > deadline:
-                pytest.fail("MCP server did not start")
-            time.sleep(0.2)
-        yield
-    finally:
-        proc.terminate()
-        proc.wait(timeout=10)
 
 
 def _pto_args(**overrides: str) -> dict[str, str]:
