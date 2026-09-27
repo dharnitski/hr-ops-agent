@@ -157,6 +157,12 @@ unchecked step.
   each other. Specialist `description` is the routing contract. Router declines unmatched
   requests. Integration `Turn` records `transfer_to_agent` separately from tool calls so
   trajectory assertions stay about real tools. Payroll and policy agents remain.
+- M3.1 payroll: `payroll_agent` gets its own read-only `payroll_toolset`
+  (`tool_filter=["get_payroll_run"]`, shared connection params, separate session). The filter
+  is a soft boundary; the hard one is server-side authorization (Module 6). Misroute found:
+  "Who is employee E1002?" was declined by the router because `pto_agent`'s description
+  didn't mention employee lookup. Routing accuracy is set by the descriptions, so widen them
+  when a specialist owns a tool; candidate for the Module 5 routing evals. Policy agent remains.
 
 ## Open questions
 
