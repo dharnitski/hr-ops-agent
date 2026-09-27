@@ -30,7 +30,7 @@ unchecked step.
 - [x] Compare LLM-driven delegation vs. ADK workflow/deterministic flows
 - [x] Rebuild one flow in LangGraph
 - [x] Architecture diagram
-- [ ] `docs/03-adk-vs-langgraph.md`
+- [x] `docs/03-adk-vs-langgraph.md`
 
 ## Module 4 — Memory, state, context engineering
 - [ ] Session state (current employee, pending actions)
@@ -197,6 +197,12 @@ unchecked step.
   descriptions, `tool_filter`) vs. hard ones (schema, server-side hours, idempotency) and shows
   Module 6 controls as planned. Local tools bypass the MCP boundary, so they sit outside the
   hard layer until identity checks exist.
+- M3 doc: `docs/03-adk-vs-langgraph.md` recommends staying on ADK for this project, specifically
+  because Module 7's deploy path and the MCP toolset are already ADK-native — not a general
+  framework verdict. Deterministic-vs-LLM routing trade-off (enumerable/keyword-detectable
+  intents vs. paraphrases/multi-intent/clarifying questions) is orthogonal to which graph
+  framework is used. Flags re-verifying before Module 8: whether `Workflow` can be an
+  `LlmAgent` sub-agent yet, and `create_agent`'s API stability.
 
 ## Open questions
 
