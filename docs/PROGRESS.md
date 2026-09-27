@@ -36,7 +36,7 @@ unchecked step.
 - [x] 1. Session state (current employee, pending actions)
 - [ ] 2. Long-term memory (Agent Platform Memory Bank on Agent Engine) -- interface/local stub
       done (`InMemoryMemoryService`); live Agent Engine resource deferred to Module 7 by choice
-- [ ] 3. Trimming/summarizing tool output
+- [x] 3. Trimming/summarizing tool output
 - [ ] 4. Sensitive data kept out of context unless needed
 
 ## Module 5 — Evaluation
@@ -263,6 +263,28 @@ unchecked step.
   with `get_employee` before using it) -- the test asserts the outcome (`load_memory` used,
   correct `get_pto_balance` call, no `find_employee`), not an exact sequence.
 
+- M4.3 trimming: two distinct ADK mechanisms exist for context growth, confirmed from installed
+  `google-adk` 2.9.2 source. Trimming (`google.adk.plugins.context_filter_plugin.ContextFilterPlugin`,
+  a `before_model_callback` App-level plugin) drops whole old *invocations* from what's sent to
+  the model -- deterministic, free, and it only touches the per-request payload, never
+  `session.events`, so it composes cleanly with M4.1 (session state is re-injected into the
+  instruction every turn regardless of trimmed history) and M4.2 (memory writes read
+  `session.events` directly). Summarizing (`App(events_compaction_config=EventsCompactionConfig(...))`
+  with a `BaseEventsSummarizer`) actually condenses old events via an extra LLM call and is still
+  `@experimental` in 2.9.2 -- picked trimming as the default for this course-scale project;
+  summarizing is the better answer once conversations are long enough that losing older detail
+  entirely (rather than just not resending it) becomes the actual problem, revisit post-Module 5
+  if eval data shows that. Wired via a new `app = App(root_agent=root_agent, plugins=[...])`
+  export in `hr_agent/agent.py` -- confirmed from `agent_loader.py` that `adk web`/`adk run`/`adk
+  deploy`/`adk eval` all check for `app` before falling back to `root_agent`, so this is what
+  actually reaches production; `root_agent` stays exported too since tests build their own
+  `Runner`/`InMemoryRunner` directly around it and don't go through `App` (so the plugin doesn't
+  apply in those tests -- acceptable since they're testing behavior other than trimming).
+  `num_invocations_to_keep=6` is a starting guess, not measured; candidate for a Module 5/8 eval
+  once there's real conversation-length data. `tests/unit/hr_agent/test_context_trimming.py`
+  exercises the actual configured plugin instance (not `ContextFilterPlugin`'s internals, which
+  are ADK's own) with hand-built `types.Content` sequences -- no model call.
+
 ## Open questions
 
 - M2: schema-layer rejections return raw pydantic text with no example ID. A server-side
@@ -282,3 +304,6 @@ unchecked step.
 - M4.2: real Agent Engine + Memory Bank instance not yet created (deferred to Module 7); revisit
   whether `agent_engine_id` provisioning belongs earlier if Module 5 evals need live memory
   behavior before Module 7.
+- M4.3: `num_invocations_to_keep=6` is unmeasured; needs real conversation-length/cost data
+  (Module 5/8) to tune. `EventsCompactionConfig` is `@experimental` in adk 2.9.2 -- reconfirm its
+  stability and whether it's still the summarization answer before relying on it later.
