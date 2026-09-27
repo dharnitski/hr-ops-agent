@@ -41,27 +41,6 @@ The agent connects to it via `HCM_MCP_URL` (set in `hr_agent/.env`); start the s
 before `adk web` / `adk run` or the agent's MCP tools will fail. Integration tests that need
 it start their own copy on port 8000, so stop yours first.
 
-## Running the standalone MCP client
-
-`scratch/mcp_client.py` talks to the server with the plain `mcp` client (no ADK, no model).
-With the server running, in a second terminal:
-
-```bash
-uv run python scratch/mcp_client.py  # lists tools, exercises errors and idempotent writes
-```
-
-It reads `HCM_MCP_URL` (default `http://localhost:8000/mcp`) and exits non-zero if a
-replay or conflict check fails.
-
-## Running the Workflow probe
-
-`scratch/workflow_probe.py` is the smallest ADK 2.x `Workflow`: two function nodes and one
-conditional route. No model, credentials, or MCP server needed.
-
-```bash
-uv run python scratch/workflow_probe.py  # prints which node handled each of two inputs
-```
-
 ## Running the agent
 
 With the MCP server running (see above), in a second terminal:
@@ -91,5 +70,47 @@ uv run ruff check .                  # lint
 uv run pytest                        # unit tests (tests/unit)
 uv run pytest tests/integration     # integration tests (need hr_agent/.env)
 uv run adk eval hr_agent evals/      # eval gate
-uv run python -m scratch.react_from_scratch  # no-framework ReAct loop (needs hr_agent/.env)
+```
+
+## Scratch
+
+Throwaway experiments in `scratch/`: not imported by production code, not covered by CI.
+
+`scratch/mcp_client.py` talks to the MCP server with the plain `mcp` client (no ADK, no
+model). With the server running (see above), in a second terminal:
+
+```bash
+uv run python scratch/mcp_client.py  # lists tools, exercises errors and idempotent writes
+```
+
+It reads `HCM_MCP_URL` (default `http://localhost:8000/mcp`) and exits non-zero if a
+replay or conflict check fails.
+
+`scratch/workflow_probe.py` is the smallest ADK 2.x `Workflow`: two function nodes and one
+conditional route. No model, credentials, or MCP server needed.
+
+```bash
+uv run python scratch/workflow_probe.py  # prints which node handled each of two inputs
+```
+
+`scratch/workflow_router.py` is a deterministic ADK `Workflow` router over the existing
+specialists (keyword rules, no router LLM call) — compare with the LLM router in
+`hr_agent/agent.py`. PTO/payroll prompts need the MCP server running.
+
+```bash
+uv run python scratch/workflow_router.py
+```
+
+`scratch/langgraph_router.py` is a LangGraph rebuild of the same router flow (policy path
+only), reusing the ADK router's keyword rules, policy instruction, and handbook tool
+unchanged — see the ADK vs. LangGraph comparison doc in `docs/`.
+
+```bash
+uv run python -m scratch.langgraph_router
+```
+
+`scratch/react_from_scratch.py` is a no-framework ReAct loop (needs `hr_agent/.env`).
+
+```bash
+uv run python -m scratch.react_from_scratch
 ```
