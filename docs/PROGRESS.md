@@ -164,6 +164,16 @@ unchecked step.
   "Who is employee E1002?" was declined by the router because `pto_agent`'s description
   didn't mention employee lookup. Routing accuracy is set by the descriptions, so widen them
   when a specialist owns a tool; candidate for the Module 5 routing evals. Policy agent remains.
+- M3 router fix (found during M4 testing): `test_two_questions_in_one_message` was flaky
+  (~1/3 failure rate) with the router declining a compound question outright, in ~1.8s with no
+  transfer at all -- both parts ("is Christmas a holiday", "how much sick time") are squarely in
+  `pto_agent`'s description, so this was the router misreading "two questions" as itself a
+  reason to decline, not a real ambiguity. `pto_agent`'s own instruction already says "if a
+  question needs several lookups, make each one," but the router (added after that rule was
+  written) had no equivalent guidance and could decline before ever handing off. Added a router
+  rule: a multi-part message that matches one specialist should still transfer once, not be
+  treated as ambiguous by virtue of having multiple parts. 5/5 live runs passed after the fix
+  (was ~1/3 before); full integration suite (25 tests) still green.
 - M3.1 policy: `search_handbook` (`hr_agent/handbook.py`) is deterministic keyword retrieval
   over `## ` sections (stopwords dropped, title matches weighted 3x, top 3 with nonzero score);
   embeddings add nothing at 8 sections. Contract: `success` / `not_found` (lists available
