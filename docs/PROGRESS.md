@@ -44,7 +44,7 @@ unchecked step.
 - [x] 2. Trajectory + response evals via `adk eval`
 - [x] 3. LLM-as-judge rubric
 - [x] 4. Launch bar (task success, zero unauthorized access, p95 latency, cost/task)
-- [ ] 5. Wired into CI as a gate
+- [x] 5. Wired into CI as a gate
 - [ ] 6. `docs/05-eval-standard.md`
 
 ## Module 6 — Safety and governance
@@ -591,6 +591,29 @@ unchecked step.
     today, the other three stay documented targets until Module 6/8 exist. Wiring only the
     enforceable one into CI without flagging the rest as still-open (not silently met) would
     misrepresent what "launch ready" means -- worth calling out explicitly in M5.6's doc.
+
+- M5.5 CI eval gate: `scripts/run_eval_gate.py` replaces the old placeholder (which globbed
+  `evals/*.evalset.json` -- a pattern that never matched, since the real files are one level
+  down in `evals/{happy_path,ambiguous,adversarial}/`). Runs one `adk eval` invocation per
+  tier (required for `test_config.json` auto-pickup, per M5.1) against a fresh MCP server
+  subprocess per attempt, not a shared long-lived one -- the idempotency-key collisions and
+  connection-closed flakiness in M5.2/M5.3 were both caused by reusing one server process
+  across runs, and two adversarial cases hardcode a one-time-use idempotency key that a
+  prior run may have already consumed. A bounded retry (3 attempts, fresh server each time)
+  matches on the specific transient-failure text already documented as occasional (OAuth
+  token-refresh timeout, MCP "Connection closed") and only retries those -- a real failure
+  fails immediately, no retry. Per M5.4, the job's own output says explicitly that this only
+  enforces task success; zero-unauthorized-access/latency/cost stay undecided by this gate,
+  not silently assumed covered.
+  Left deliberately unfinished, on purpose, not by oversight: the `eval` job in `ci.yml` only
+  runs live once a `GOOGLE_CLOUD_PROJECT` repo variable and `GCP_WIF_PROVIDER`/
+  `GCP_WIF_SERVICE_ACCOUNT` repo secrets exist (Workload Identity Federation, no long-lived
+  key committed anywhere) -- otherwise it prints a message and exits clean. This repo has no
+  GCP CI credentials configured yet (confirmed: no `.github` auth step, no deploy/ configs
+  beyond `.gitkeep`, Module 7 not started), and wiring live, billed Vertex AI calls to fire on
+  every push/PR is a cost-and-IAM decision for the project owner, not something to enable
+  silently while implementing the mechanics. Creating the WIF provider/service account and
+  setting the repo variable/secrets is a follow-up step for whoever owns the GCP project.
 
 ## Open questions
 
