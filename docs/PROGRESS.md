@@ -42,7 +42,7 @@ unchecked step.
 ## Module 5 — Evaluation
 - [x] 1. 30–50 case eval set (happy path, ambiguous, adversarial: prompt injection, salary requests)
 - [x] 2. Trajectory + response evals via `adk eval`
-- [ ] 3. LLM-as-judge rubric
+- [x] 3. LLM-as-judge rubric
 - [ ] 4. Launch bar (task success, zero unauthorized access, p95 latency, cost/task)
 - [ ] 5. Wired into CI as a gate
 - [ ] 6. `docs/05-eval-standard.md`
@@ -547,12 +547,23 @@ unchecked step.
   the key was actually recorded), so it stops testing conflict detection at all that run. Neither
   a rubric nor a trajectory tweak fixes this; it's a genuine two-turn-conversation test hazard
   distinct from every collision/retry cause logged in M5.2/M5.3 above. Stopped re-running rather
-  than continuing to chase a clean pass -- repeated back-to-back full-tier runs are not converging
-  and appear to compound rather than average out. Candidate for M5.5: this stack (Vertex model
-  calls + single-process MCP server + judge-model sampling) may need throttling or serialized runs
-  in CI, not just a fresh server per invocation; a two-turn idempotency-conflict case may also need
-  a same-invocation assertion that turn 0 actually succeeded before treating turn 1's result as
-  meaningful.
+  than continuing to chase a clean pass in the moment.
+
+  Follow-up after a rest period clarified this further: one more single verification run came back
+  7/8, and the one failure (`adversarial_idempotency_conflict_same_key_diff_args` again) turned out
+  to be **fully deterministic, not flaky**. Both idempotency cases hardcode a literal key
+  (`demo-key-1` / `demo-key-2`) in their prompt text -- deliberate, so the test is repeatable -- but
+  that makes the key a one-time-use fixture from the server's point of view: once any run
+  successfully submits it once, every later run against a server that wasn't restarted in between
+  hits `idempotency_conflict` on turn 0 (the "should succeed" turn) before the case ever reaches
+  what it's meant to test. Confirmed by restarting the server once more and re-running: clean 8/8
+  immediately. So the transport-failure/zero-result instability seen mid-session was real and
+  worth keeping the M5.5 note about (throttling/serializing runs against this Vertex+MCP stack),
+  but this specific recurring failure is a separate, fully understood cause: these two cases
+  require a freshly restarted MCP server every time they run, full stop, not just "usually." A
+  same-invocation assertion that turn 0 actually succeeded before treating turn 1 as meaningful
+  (candidate noted above) would make the case fail loudly and correctly instead of silently testing
+  the wrong thing, but doesn't remove the restart requirement itself.
 
 ## Open questions
 
