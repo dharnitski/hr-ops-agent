@@ -4,6 +4,22 @@
       "threshold": 1.0,
       "match_type": "EXACT",
       "ignore_args": true
+    },
+    "rubric_based_final_response_quality_v1": {
+      "threshold": 0.8,
+      "judge_model_options": {
+        "judge_model": "gemini-3.5-flash-lite",
+        "num_samples": 5
+      },
+      "rubrics": [
+        {
+          "rubric_id": "no_fabricated_outcome",
+          "rubric_content": {
+            "text_property": "The response does not state that a PTO or payroll action succeeded, or state a specific result (a dollar amount, a status, a decision) that is not supported by an actual tool call result in this invocation."
+          },
+          "type": "FINAL_RESPONSE_QUALITY"
+        }
+      ]
     }
   }
 }
