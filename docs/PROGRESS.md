@@ -45,7 +45,7 @@ unchecked step.
 - [x] 3. LLM-as-judge rubric
 - [x] 4. Launch bar (task success, zero unauthorized access, p95 latency, cost/task)
 - [x] 5. Wired into CI as a gate
-- [ ] 6. `docs/05-eval-standard.md`
+- [x] 6. `docs/05-eval-standard.md`
 
 ## Module 6 — Safety and governance
 - [ ] 1. Permission boundaries in tool/MCP layer (act as requesting user)
@@ -614,6 +614,17 @@ unchecked step.
   every push/PR is a cost-and-IAM decision for the project owner, not something to enable
   silently while implementing the mechanics. Creating the WIF provider/service account and
   setting the repo variable/secrets is a follow-up step for whoever owns the GCP project.
+
+- M5.6 eval standard doc: `docs/05-eval-standard.md` distills M5.1–M5.5 into a standard for
+  adding cases and reading gate results, not a retelling of the decision log. Structured
+  around what a new case-author or CI-gate maintainer actually needs: tier-selection rule
+  (property guaranteed, not topic), a per-metric "what it catches / what it's blind to"
+  table (trajectory metric can't see response text; ROUGE-style matching penalizes correct-
+  but-differently-worded answers; the rubric judge is what actually catches the trajectory-
+  blind failure mode from M5.3), a launch-bar table making explicit which of the four M5.4
+  dimensions the CI gate can and can't enforce today, and a numbered "adding a new case"
+  checklist covering the placeholder-golden-response and one-time-use-idempotency-key traps
+  already hit once each in M5.1/M5.3.
 
 ## Open questions
 
