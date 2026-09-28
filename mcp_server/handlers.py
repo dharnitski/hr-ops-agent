@@ -45,6 +45,7 @@ ErrorCode = Literal[
     "no_working_days",
     "idempotency_conflict",
     "invalid_key",
+    "forbidden",
 ]
 
 
@@ -87,19 +88,28 @@ class PtoRequestResult(TypedDict):
 # on purpose: sharing code across the MCP boundary would couple deploy and versioning. The
 # agent-side copy goes away in M2.3. Once a second handler lands here (M2.2), extract a
 # private _lookup(employee_id) within this module.
-def get_employee(employee_id: EmployeeId) -> EmployeeResult | ErrorResult:
-    """Look up an employee's basic profile by employee ID.
+def get_employee(
+    employee_id: EmployeeId, *, caller_employee_id: str | None
+) -> EmployeeResult | ErrorResult:
+    """Look up the caller's own basic profile by employee ID.
 
-    Use to confirm who an ID belongs to. Does not return pay, balances, or reporting lines.
+    Self-service only: returns "forbidden" unless employee_id is the caller's own ID. Does
+    not return pay, balances, or reporting lines.
 
     Args:
         employee_id: Employee ID in the form "E" plus four digits, e.g. "E1002".
+        caller_employee_id: The requesting session's own employee ID, established by the
+            transport layer -- never a model-supplied argument (Module 6).
 
     Returns:
         On success: {"status": "success", "employee_id", "name", "title"}.
-        On failure: {"status": "error", "error": <reason>}.
+        On failure: {"status": "error", "code", "error"}; code is one of not_found, forbidden.
     """
-    normalized_id, employee = _lookup(employee_id)
+    normalized_id = employee_id.strip().upper()
+    normalized_caller = (caller_employee_id or "").strip().upper()
+    if not normalized_caller or normalized_caller != normalized_id:
+        return _forbidden(normalized_id)
+    _, employee = _lookup(employee_id)
     if employee is None:
         return _not_found(employee_id)
     return {
@@ -130,6 +140,13 @@ def _not_found(employee_id: str) -> ErrorResult:
     return _error(
         "not_found",
         f"No employee found with ID '{employee_id}'. IDs look like 'E1002'.",
+    )
+
+
+def _forbidden(employee_id: str) -> ErrorResult:
+    return _error(
+        "forbidden",
+        f"Not authorized to access employee '{employee_id}'. You may only access your own record.",
     )
 
 
@@ -194,13 +211,39 @@ def _check_request(
     return start, end, hours
 
 
+def _check_caller_and_key(
+    employee_id: str, caller_employee_id: str | None, idempotency_key: str
+) -> str | ErrorResult:
+    """Caller-identity and key-format checks that must run before the idempotency store or
+    any lookup is touched. Returns the stripped key on success, or an error dict.
+
+    Merged into one helper (instead of two guard clauses in submit_pto_request) only to keep
+    that function's return-statement count under the linter's limit; the checks themselves are
+    unrelated (identity vs. syntactic key validity) and would be separate ifs either way.
+    """
+    normalized_caller = (caller_employee_id or "").strip().upper()
+    if not normalized_caller or normalized_caller != employee_id.strip().upper():
+        return _forbidden(employee_id.strip().upper())
+    key = idempotency_key.strip()
+    if not key:
+        return _error("invalid_key", "idempotency_key must be a non-empty string.")
+    return key
+
+
 def submit_pto_request(
     employee_id: EmployeeId,
     start_date: IsoDate,
     end_date: IsoDate,
     idempotency_key: IdempotencyKey,
+    *,
+    caller_employee_id: str | None,
 ) -> PtoRequestResult | ErrorResult:
     """Submit a PTO request for an employee. Creates a record; not instantly approved.
+
+    Self-service only: returns "forbidden" unless employee_id is the caller's own ID --
+    checked first, before the idempotency store or any lookup, so an unauthorized caller can't
+    probe either one for someone else's employee_id (manager-submits-for-a-report is Module
+    6.2, not this check).
 
     Hours are computed by the server: 8h per weekday, excluding company holidays. Does not
     reduce the balance. Safe to retry: repeating a call with the same idempotency_key and
@@ -212,17 +255,20 @@ def submit_pto_request(
         end_date: Last day off (inclusive), ISO format YYYY-MM-DD, not before start_date.
         idempotency_key: Caller-chosen unique string for this request; reuse it only when
             retrying the same request.
+        caller_employee_id: The requesting session's own employee ID, established by the
+            transport -- never a model-supplied argument (Module 6).
 
     Returns:
         On success: {"status": "success", "request_id", "employee_id", "start_date",
         "end_date", "hours", "request_status": "pending", "replayed"}.
         On failure: {"status": "error", "code", "error"}; code is one of not_found,
         invalid_dates, insufficient_balance, no_working_days, idempotency_conflict,
-        invalid_key.
+        invalid_key, forbidden.
     """
-    key = idempotency_key.strip()
-    if not key:
-        return _error("invalid_key", "idempotency_key must be a non-empty string.")
+    precheck = _check_caller_and_key(employee_id, caller_employee_id, idempotency_key)
+    if not isinstance(precheck, str):
+        return precheck
+    key = precheck
 
     normalized_id, employee = _lookup(employee_id)
     args = (normalized_id, start_date.strip(), end_date.strip())
