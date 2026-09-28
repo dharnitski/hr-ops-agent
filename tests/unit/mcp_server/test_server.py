@@ -2,9 +2,12 @@
 
 import asyncio
 from collections.abc import Iterator
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from mcp.server.context import ServerRequestContext
+from mcp.server.mcpserver.context import Context
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult
 from pydantic import TypeAdapter
@@ -23,9 +26,33 @@ def _reset_requests() -> Iterator[None]:
     handlers._pto_requests.clear()
 
 
-def call(name: str, args: dict[str, Any]) -> dict[str, Any]:
-    """Call a tool over the server's dispatch path; return its structured result."""
-    result = asyncio.run(mcp.call_tool(name, args))
+def _ctx_for(caller_employee_id: str) -> Context:
+    """A Context carrying a caller-identity header, standing in for a real HTTP request.
+
+    `mcp.call_tool` builds a context with no request at all when none is given, so
+    `get_employee`'s caller check has nothing to read; this fakes only the one attribute
+    (`request.headers`) that `server.py`'s `_caller_employee_id` actually touches. `session`/
+    `lifespan_context` are required fields on `ServerRequestContext` but unused by that path.
+    """
+    request = SimpleNamespace(headers={"x-caller-employee-id": caller_employee_id})
+    request_context = ServerRequestContext(
+        session=None,  # ty: ignore[invalid-argument-type]
+        lifespan_context={},
+        protocol_version="2026-06-18",
+        method="tools/call",
+        request=request,
+    )
+    return Context(mcp_server=mcp, request_context=request_context)
+
+
+def call(name: str, args: dict[str, Any], *, caller_employee_id: str = "E1002") -> dict[str, Any]:
+    """Call a tool over the server's dispatch path; return its structured result.
+
+    Defaults the caller identity to E1002 so existing self-only-safe call sites (payroll,
+    idempotency, schema-rejection tests) don't each need to know about Module 6's auth check;
+    tests of the check itself pass caller_employee_id explicitly.
+    """
+    result = asyncio.run(mcp.call_tool(name, args, context=_ctx_for(caller_employee_id)))
     assert isinstance(result, CallToolResult)
     assert not result.is_error
     assert result.structured_content is not None
@@ -89,9 +116,36 @@ def test_success_result_over_dispatch() -> None:
 
 
 def test_handler_errors_are_data_not_protocol_errors() -> None:
-    result = call("get_employee", {"employee_id": "E9999"})
+    result = call("get_employee", {"employee_id": "E9999"}, caller_employee_id="E9999")
     assert result["status"] == "error"
     assert result["code"] == "not_found"
+
+
+def test_get_employee_forbidden_over_dispatch() -> None:
+    result = call("get_employee", {"employee_id": "E1002"}, caller_employee_id="E1001")
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_get_payroll_run_success_for_payroll_role_over_dispatch() -> None:
+    result = call("get_payroll_run", {"run_id": "PR-2026-09"}, caller_employee_id="E1003")
+    assert result["status"] == "success"
+    assert result["run_id"] == "PR-2026-09"
+
+
+def test_get_payroll_run_forbidden_for_non_payroll_role_over_dispatch() -> None:
+    result = call("get_payroll_run", {"run_id": "PR-2026-09"})  # default caller: E1002
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_get_employee_forbidden_with_no_context_at_all() -> None:
+    # No context= passed: the real shape of a call with no transport-carried identity.
+    result = asyncio.run(mcp.call_tool("get_employee", {"employee_id": "E1002"}))
+    assert isinstance(result, CallToolResult)
+    assert not result.is_error
+    assert result.structured_content is not None
+    assert result.structured_content["result"]["code"] == "forbidden"
 
 
 @pytest.mark.parametrize(
@@ -187,6 +241,19 @@ def test_pto_key_conflict_over_dispatch() -> None:
         "submit_pto_request", {**base, "start_date": "2026-09-14", "end_date": "2026-09-14"}
     )
     assert result["code"] == "idempotency_conflict"
+
+
+def test_submit_pto_forbidden_over_dispatch() -> None:
+    args = {
+        "employee_id": "E1002",
+        "start_date": "2026-09-11",
+        "end_date": "2026-09-11",
+        "idempotency_key": "k1",
+    }
+    result = call("submit_pto_request", args, caller_employee_id="E1001")
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+    assert not handlers._pto_requests
 
 
 def test_responses_never_leak_sensitive_fields() -> None:

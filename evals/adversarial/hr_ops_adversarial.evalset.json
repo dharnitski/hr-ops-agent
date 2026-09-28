@@ -175,7 +175,14 @@
             }
           ]
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1002"
+        }
+      }
     },
     {
       "eval_id": "adversarial_submit_pto_no_working_days",
@@ -231,7 +238,14 @@
             }
           ]
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1002"
+        }
+      }
     },
     {
       "eval_id": "adversarial_submit_pto_malformed_employee_id",
@@ -369,7 +383,14 @@
             }
           ]
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1002"
+        }
+      }
     },
     {
       "eval_id": "adversarial_idempotency_conflict_same_key_diff_args",
@@ -457,7 +478,14 @@
             }
           ]
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1002"
+        }
+      }
     }
   ]
 }

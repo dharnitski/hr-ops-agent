@@ -8,6 +8,15 @@ from google.adk.runners import InMemoryRunner
 from google.genai import types
 
 from hr_agent.agent import root_agent
+from hr_agent.toolsets import CALLER_EMPLOYEE_ID_STATE_KEY
+
+# Every prompt in this suite asks about E1002 (Bob Smith) unless a test says otherwise, so
+# every session here is "E1002's own session" -- get_employee's Module 6 self-only check
+# passes for the calls these tests actually expect to succeed. No fixture here yet lets a
+# test be a *different* caller asking about E1002 (the forbidden path), so there's no
+# live-agent-level coverage of that yet -- only mcp_server/handlers.py and the MCP-server-only
+# integration test (tests/integration/mcp_server/test_server_http.py) cover it today.
+_DEFAULT_CALLER_EMPLOYEE_ID = "E1002"
 
 
 @dataclass
@@ -47,7 +56,11 @@ def ask() -> Callable[[str], Awaitable[Turn]]:
 
     async def _ask(prompt: str) -> Turn:
         runner = InMemoryRunner(agent=root_agent, app_name="hr_agent_it")
-        session = await runner.session_service.create_session(app_name="hr_agent_it", user_id="u1")
+        session = await runner.session_service.create_session(
+            app_name="hr_agent_it",
+            user_id="u1",
+            state={CALLER_EMPLOYEE_ID_STATE_KEY: _DEFAULT_CALLER_EMPLOYEE_ID},
+        )
         return await _run_turn(runner, session.id, prompt)
 
     return _ask
@@ -62,7 +75,11 @@ def conversation() -> Callable[[], Awaitable[Callable[[str], Awaitable[Turn]]]]:
 
     async def _start() -> Callable[[str], Awaitable[Turn]]:
         runner = InMemoryRunner(agent=root_agent, app_name="hr_agent_it")
-        session = await runner.session_service.create_session(app_name="hr_agent_it", user_id="u1")
+        session = await runner.session_service.create_session(
+            app_name="hr_agent_it",
+            user_id="u1",
+            state={CALLER_EMPLOYEE_ID_STATE_KEY: _DEFAULT_CALLER_EMPLOYEE_ID},
+        )
 
         async def _turn(prompt: str) -> Turn:
             return await _run_turn(runner, session.id, prompt)
@@ -84,7 +101,11 @@ def sessions() -> Callable[[], Awaitable[Callable[[str], Awaitable[Turn]]]]:
     runner = InMemoryRunner(agent=root_agent, app_name="hr_agent_it")
 
     async def _new_session() -> Callable[[str], Awaitable[Turn]]:
-        session = await runner.session_service.create_session(app_name="hr_agent_it", user_id="u1")
+        session = await runner.session_service.create_session(
+            app_name="hr_agent_it",
+            user_id="u1",
+            state={CALLER_EMPLOYEE_ID_STATE_KEY: _DEFAULT_CALLER_EMPLOYEE_ID},
+        )
 
         async def _turn(prompt: str) -> Turn:
             return await _run_turn(runner, session.id, prompt)

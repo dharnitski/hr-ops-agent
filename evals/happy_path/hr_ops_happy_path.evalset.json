@@ -244,7 +244,14 @@
             ]
           }
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1002"
+        }
+      }
     },
     {
       "eval_id": "happy_submit_pto_request_by_name",
@@ -285,7 +292,14 @@
             ]
           }
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1002"
+        }
+      }
     },
     {
       "eval_id": "happy_submit_pto_request_by_id",
@@ -320,7 +334,14 @@
             ]
           }
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1004"
+        }
+      }
     },
     {
       "eval_id": "happy_payroll_lookup_paid",
@@ -353,7 +374,14 @@
             ]
           }
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1003"
+        }
+      }
     },
     {
       "eval_id": "happy_payroll_lookup_draft",
@@ -386,7 +414,14 @@
             ]
           }
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1003"
+        }
+      }
     },
     {
       "eval_id": "happy_policy_pto_carryover",

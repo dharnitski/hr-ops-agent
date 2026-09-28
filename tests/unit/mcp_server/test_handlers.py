@@ -11,7 +11,7 @@ from mcp_server.handlers import (
 
 
 def test_get_employee_success() -> None:
-    assert get_employee("E1002") == {
+    assert get_employee("E1002", caller_employee_id="E1002") == {
         "status": "success",
         "employee_id": "E1002",
         "name": "Bob Smith",
@@ -20,20 +20,21 @@ def test_get_employee_success() -> None:
 
 
 def test_get_employee_normalizes_id() -> None:
-    result = get_employee("  e1002 ")
+    result = get_employee("  e1002 ", caller_employee_id="e1002")
     assert result["status"] == "success"
     assert result["employee_id"] == "E1002"
 
 
 @pytest.mark.parametrize("bad_id", ["E9999", "", "Bob", "1002"])
 def test_get_employee_unknown_or_malformed_id(bad_id: str) -> None:
-    result = get_employee(bad_id)
+    # Caller matches the (malformed/unknown) id exactly, so this exercises not_found/lookup
+    # failure specifically, not the caller-mismatch path covered separately below.
+    result = get_employee(bad_id, caller_employee_id=bad_id)
     assert result["status"] == "error"
-    assert "E1002" in result["error"]
 
 
 def test_get_employee_omits_sensitive_fields() -> None:
-    result = get_employee("E1002")
+    result = get_employee("E1002", caller_employee_id="E1002")
     assert set(result) == {"status", "employee_id", "name", "title"}
 
 
@@ -45,20 +46,45 @@ def _reset_requests() -> Iterator[None]:
 
 
 def test_get_employee_error_has_code() -> None:
-    result = get_employee("E9999")
+    result = get_employee("E9999", caller_employee_id="E9999")
     assert result["status"] == "error"
     assert result["code"] == "not_found"
 
 
-def test_get_payroll_run_success() -> None:
-    result = get_payroll_run(" pr-2026-09 ")
+def test_get_employee_forbidden_for_someone_elses_id() -> None:
+    result = get_employee("E1002", caller_employee_id="E1001")
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_get_employee_forbidden_when_no_caller_identity() -> None:
+    result = get_employee("E1002", caller_employee_id=None)
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_get_employee_forbidden_does_not_confirm_target_exists() -> None:
+    # An unauthorized caller shouldn't learn whether an arbitrary ID even exists.
+    result = get_employee("E9999", caller_employee_id="E1002")
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_get_employee_caller_id_normalized_case_and_whitespace() -> None:
+    result = get_employee("E1002", caller_employee_id="  e1002 ")
+    assert result["status"] == "success"
+
+
+@pytest.mark.parametrize("reader_id", ["E1003", "E1004"])
+def test_get_payroll_run_success(reader_id: str) -> None:
+    result = get_payroll_run(" pr-2026-09 ", caller_employee_id=reader_id)
     assert result["status"] == "success"
     assert result["run_id"] == "PR-2026-09"
     assert result["run_status"] == "draft"
 
 
 def test_get_payroll_run_omits_per_employee_pay() -> None:
-    result = get_payroll_run("PR-2026-09")
+    result = get_payroll_run("PR-2026-09", caller_employee_id="E1003")
     assert set(result) == {
         "status",
         "run_id",
@@ -72,15 +98,37 @@ def test_get_payroll_run_omits_per_employee_pay() -> None:
 
 
 def test_get_payroll_run_not_found() -> None:
-    result = get_payroll_run("PR-1999-01")
+    result = get_payroll_run("PR-1999-01", caller_employee_id="E1003")
     assert result["status"] == "error"
     assert result["code"] == "not_found"
     assert "PR-2026-09" in result["error"]
 
 
+def test_get_payroll_run_forbidden_for_non_payroll_role() -> None:
+    # E1002 is a Software Engineer, not Payroll Specialist/Finance Director.
+    result = get_payroll_run("PR-2026-09", caller_employee_id="E1002")
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_get_payroll_run_forbidden_when_no_caller_identity() -> None:
+    result = get_payroll_run("PR-2026-09", caller_employee_id=None)
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_get_payroll_run_forbidden_does_not_confirm_run_exists() -> None:
+    # An unauthorized caller shouldn't learn whether a run ID even exists.
+    result = get_payroll_run("PR-1999-01", caller_employee_id="E1002")
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
 def test_submit_pto_success_skips_weekend() -> None:
     # 2026-09-11 is a Friday; Sat/Sun excluded, Mon 09-14 included.
-    result = submit_pto_request("E1002", "2026-09-11", "2026-09-14", "k1")
+    result = submit_pto_request(
+        "E1002", "2026-09-11", "2026-09-14", "k1", caller_employee_id="E1002"
+    )
     assert result["status"] == "success"
     assert result["hours"] == 16.0
     assert result["request_status"] == "pending"
@@ -89,14 +137,20 @@ def test_submit_pto_success_skips_weekend() -> None:
 
 def test_submit_pto_skips_holiday() -> None:
     # Labor Day 2026-09-07 (Monday) is a company holiday.
-    result = submit_pto_request("E1002", "2026-09-07", "2026-09-08", "k1")
+    result = submit_pto_request(
+        "E1002", "2026-09-07", "2026-09-08", "k1", caller_employee_id="E1002"
+    )
     assert result["status"] == "success"
     assert result["hours"] == 8.0
 
 
 def test_submit_pto_replay_returns_original() -> None:
-    first = submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1")
-    again = submit_pto_request("e1002", "2026-09-11", "2026-09-11", "k1")
+    first = submit_pto_request(
+        "E1002", "2026-09-11", "2026-09-11", "k1", caller_employee_id="E1002"
+    )
+    again = submit_pto_request(
+        "e1002", "2026-09-11", "2026-09-11", "k1", caller_employee_id="e1002"
+    )
     assert first["status"] == "success"
     assert again["status"] == "success"
     assert again["replayed"] is True
@@ -105,15 +159,17 @@ def test_submit_pto_replay_returns_original() -> None:
 
 
 def test_submit_pto_key_reuse_with_different_args() -> None:
-    submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1")
-    result = submit_pto_request("E1002", "2026-09-14", "2026-09-14", "k1")
+    submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1", caller_employee_id="E1002")
+    result = submit_pto_request(
+        "E1002", "2026-09-14", "2026-09-14", "k1", caller_employee_id="E1002"
+    )
     assert result["status"] == "error"
     assert result["code"] == "idempotency_conflict"
 
 
 def test_submit_pto_distinct_keys_create_distinct_requests() -> None:
-    a = submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1")
-    b = submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k2")
+    a = submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1", caller_employee_id="E1002")
+    b = submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k2", caller_employee_id="E1002")
     assert a["status"] == "success"
     assert b["status"] == "success"
     assert a["request_id"] != b["request_id"]
@@ -131,13 +187,42 @@ def test_submit_pto_distinct_keys_create_distinct_requests() -> None:
     ],
 )
 def test_submit_pto_errors(args: tuple[str, str, str, str], code: str) -> None:
-    result = submit_pto_request(*args)
+    # Caller matches args[0] (the employee_id under test) so each case reaches the specific
+    # error it's meant to exercise, not the forbidden check covered separately below.
+    result = submit_pto_request(*args, caller_employee_id=args[0])
     assert result["status"] == "error"
     assert result["code"] == code
     assert not handlers._pto_requests
 
 
 def test_failed_request_does_not_consume_key() -> None:
-    submit_pto_request("E1003", "2026-09-11", "2026-09-11", "k1")
-    ok = submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1")
+    submit_pto_request("E1003", "2026-09-11", "2026-09-11", "k1", caller_employee_id="E1003")
+    ok = submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1", caller_employee_id="E1002")
     assert ok["status"] == "success"
+
+
+def test_submit_pto_forbidden_for_someone_elses_id() -> None:
+    result = submit_pto_request(
+        "E1002", "2026-09-11", "2026-09-11", "k1", caller_employee_id="E1001"
+    )
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+    assert not handlers._pto_requests
+
+
+def test_submit_pto_forbidden_when_no_caller_identity() -> None:
+    result = submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1", caller_employee_id=None)
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_submit_pto_forbidden_checked_before_idempotency_store() -> None:
+    # A prior, legitimate request under this key exists; an unauthorized caller reusing it
+    # for a different employee_id must still get "forbidden", not "idempotency_conflict" --
+    # the identity check must run before the key is even looked up.
+    submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1", caller_employee_id="E1002")
+    result = submit_pto_request(
+        "E1003", "2026-09-11", "2026-09-11", "k1", caller_employee_id="E1001"
+    )
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"

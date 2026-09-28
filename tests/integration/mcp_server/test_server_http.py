@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 from mcp import Client
+from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 
 pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("hcm_server")]
 
@@ -21,8 +22,16 @@ def _pto_args(**overrides: str) -> dict[str, str]:
     }
 
 
-async def _call(name: str, args: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
-    async with Client(URL) as client:
+async def _call(
+    name: str, args: dict[str, Any], *, caller_employee_id: str = "E1002"
+) -> tuple[bool, dict[str, Any]]:
+    """Calls over real HTTP with a caller-identity header, the same shape the ADK-side
+    header_provider sends (hr_agent/toolsets.py) -- proves the Module 6 auth check works on
+    the actual wire, not just through in-process dispatch. Defaults to E1002 so existing
+    non-auth-focused cases below don't each need to know about it.
+    """
+    http_client = create_mcp_http_client(headers={"x-caller-employee-id": caller_employee_id})
+    async with Client(streamable_http_client(URL, http_client=http_client)) as client:
         result = await client.call_tool(name, args)
     return result.is_error, result.structured_content or {}
 
@@ -40,9 +49,41 @@ async def test_success_and_error_results_are_wrapped_in_result() -> None:
     assert ok["result"]["status"] == "success"
     assert ok["result"]["name"] == "Bob Smith"
 
-    is_error, missing = await _call("get_employee", {"employee_id": "E9999"})
+    is_error, missing = await _call(
+        "get_employee", {"employee_id": "E9999"}, caller_employee_id="E9999"
+    )
     assert not is_error  # business errors are data, not protocol errors
     assert missing["result"]["code"] == "not_found"
+
+
+async def test_get_employee_forbidden_for_someone_elses_id_over_http() -> None:
+    is_error, result = await _call(
+        "get_employee", {"employee_id": "E1002"}, caller_employee_id="E1001"
+    )
+    assert not is_error
+    assert result["result"]["code"] == "forbidden"
+
+
+async def test_get_employee_forbidden_with_no_caller_header_over_http() -> None:
+    async with Client(URL) as client:  # no custom headers at all
+        result = await client.call_tool("get_employee", {"employee_id": "E1002"})
+    assert not result.is_error
+    assert result.structured_content is not None
+    assert result.structured_content["result"]["code"] == "forbidden"
+
+
+async def test_get_payroll_run_succeeds_for_payroll_role_over_http() -> None:
+    is_error, result = await _call(
+        "get_payroll_run", {"run_id": "PR-2026-09"}, caller_employee_id="E1003"
+    )
+    assert not is_error
+    assert result["result"]["status"] == "success"
+
+
+async def test_get_payroll_run_forbidden_for_non_payroll_role_over_http() -> None:
+    is_error, result = await _call("get_payroll_run", {"run_id": "PR-2026-09"})  # E1002 default
+    assert not is_error
+    assert result["result"]["code"] == "forbidden"
 
 
 async def test_retry_with_same_key_replays_over_http() -> None:
@@ -60,6 +101,12 @@ async def test_same_key_different_args_conflicts() -> None:
     is_error, conflict = await _call("submit_pto_request", {**args, "end_date": "2026-10-15"})
     assert not is_error
     assert conflict["result"]["code"] == "idempotency_conflict"
+
+
+async def test_submit_pto_forbidden_for_someone_elses_id_over_http() -> None:
+    is_error, result = await _call("submit_pto_request", _pto_args(), caller_employee_id="E1001")
+    assert not is_error
+    assert result["result"]["code"] == "forbidden"
 
 
 async def test_malformed_input_is_rejected_and_creates_nothing() -> None:
