@@ -9,15 +9,15 @@ flowchart LR
         pto["pto_agent"]
         payroll["payroll_agent"]
         policy["policy_agent"]
-        local_pto["local tools<br/>find_employee<br/>get_pto_balance<br/>list_holidays"]
+        local_pto["local tool<br/>list_holidays"]
         local_pol["local tool<br/>search_handbook<br/>(keyword retrieval)"]
-        ts_hcm["hcm_toolset<br/>filter: get_employee,<br/>submit_pto_request"]
+        ts_hcm["hcm_toolset<br/>filter: get_employee,<br/>get_pto_balance,<br/>submit_pto_request"]
         ts_pay["payroll_toolset<br/>filter: get_payroll_run"]
     end
 
     subgraph mcp["MCP server — mcp_server/"]
         schema["schema validation<br/>strict args, typed outputs"]
-        handlers["handlers<br/>get_employee<br/>submit_pto_request<br/>get_payroll_run"]
+        handlers["handlers<br/>get_employee<br/>get_pto_balance<br/>submit_pto_request<br/>get_payroll_run"]
         store[("mock HCM data<br/>+ idempotency store<br/>in memory")]
     end
 
@@ -57,8 +57,11 @@ model or in-process config can bypass them. Green = hard controls (schema valida
 server-computed hours, idempotency): enforced regardless of what the model sends. Dashed
 grey = planned, not built.
 
-- Local tools (`find_employee`, `get_pto_balance`, `list_holidays`) have no MCP equivalent
-  and bypass the server; they carry no caller-identity check (see M1.8).
+- `list_holidays` is the only remaining local tool; it isn't employee-scoped, so there's no
+  caller-identity question for it. `find_employee` and `get_pto_balance` (originally local,
+  see M1.8) are retired: balance lookups now go through the MCP layer's `get_pto_balance`,
+  self-service only like `get_employee`; name-based lookup has no MCP equivalent and was
+  dropped rather than given one (M6.2).
 - Each specialist opens its own MCP session; `tool_filter` is per toolset.
 - The deterministic-router and LangGraph alternatives live in `scratch/` and are not part
   of this flow.

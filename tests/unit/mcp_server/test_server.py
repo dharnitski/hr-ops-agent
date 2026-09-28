@@ -16,7 +16,7 @@ from mcp_server import handlers
 from mcp_server.handlers import IsoDate
 from mcp_server.server import mcp
 
-TOOLS = {"get_employee", "get_payroll_run", "submit_pto_request"}
+TOOLS = {"get_employee", "get_pto_balance", "get_payroll_run", "submit_pto_request"}
 
 
 @pytest.fixture(autouse=True)
@@ -123,6 +123,22 @@ def test_handler_errors_are_data_not_protocol_errors() -> None:
 
 def test_get_employee_forbidden_over_dispatch() -> None:
     result = call("get_employee", {"employee_id": "E1002"}, caller_employee_id="E1001")
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_get_pto_balance_success_over_dispatch() -> None:
+    assert call("get_pto_balance", {"employee_id": "E1002"}) == {
+        "status": "success",
+        "employee_id": "E1002",
+        "name": "Bob Smith",
+        "pto_hours": 64.5,
+        "sick_hours": 24.0,
+    }
+
+
+def test_get_pto_balance_forbidden_over_dispatch() -> None:
+    result = call("get_pto_balance", {"employee_id": "E1002"}, caller_employee_id="E1001")
     assert result["status"] == "error"
     assert result["code"] == "forbidden"
 

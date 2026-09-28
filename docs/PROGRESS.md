@@ -77,671 +77,194 @@ unchecked step.
 
 ## Decisions
 
-- M1.3: Tools return `{"status": ...}` dicts, errors as data with actionable messages
-  (ID format, available years). IDs normalized (strip/upper). Tests live in `tests/unit/`;
-  integration tests in `tests/integration/`, on demand.
-- M1.1: Chose Vertex AI (ADC) over AI Studio API key — aligns with Agent Engine deploy
-  path in Module 7. Model ID set via `MODEL_ID` in `.env`, currently `gemini-3.5-flash-lite`
-  (re-verify before Module 8 tier-routing work; Gemini 2.5 retires 2026-10-20).
+Current state and the reasoning behind it, by module. Superseded/resolved debugging detail has
+been cut; see git history for the blow-by-blow if needed.
 
-- M1.5: Behavior of the five test prompts is covered by live integration tests
-  (`tests/integration/hr_agent/test_agent_live.py`), asserting trajectory before wording.
+### Module 1
+- Vertex AI (ADC) over an AI Studio API key -- aligns with the Module 7 Agent Engine deploy
+  path. Model ID via `MODEL_ID` in `.env` (re-verify before Module 8; Gemini 2.5 retires
+  2026-10-20).
+- Tools return `{"status": ...}` dicts; errors are data with actionable messages, never
+  exceptions. IDs normalized (strip/upper).
+- `find_employee`/`get_pto_balance` started as local tools with no caller-identity check
+  (flagged then, closed in M6.2 -- see below).
+- Pattern rule: least autonomy that meets the requirement. Hard gates (authorization, write
+  approval) belong in the tool/server layer; prompt rules are the soft layer only.
+- `scratch/react_from_scratch.py`: framework-free ReAct loop (`google-genai`, auto-calling
+  disabled). `MAX_STEPS` bounds steps, not cost or latency.
 
-- M1.7: Manual loop appends the model turn unmodified (thought signatures must round-trip
-  on Gemini 3.x). Tool failures returned as observations. `MAX_STEPS` bounds steps only,
-  not cost; token/time budgets and idempotent writes are deferred to Modules 2/6.
-- M1.8: `find_employee` returns id/name/title only (no balances); `ambiguous` status for
-  multiple matches, prompt-enforced (hard gate deferred to Module 6 HITL/callbacks).
-  Caller-identity authorization belongs in the MCP server, with identity from the
-  transport, not a model-supplied argument (Modules 2/6).
+### Module 2
+- MCP server over Streamable HTTP (shared service, independent deploy, headers carry caller
+  identity later). `mcp 2.x`'s `MCPServer` replaces `FastMCP`; handlers are pure functions,
+  `server.py` is thin wiring.
+- Data minimization: `get_employee`/`get_payroll_run` return only non-sensitive fields (no
+  balances, no per-employee pay).
+- Errors carry a machine-readable `code` plus message. Schema-layer rejections (malformed ID,
+  unknown argument) are protocol errors (`ToolError`, `additionalProperties: false`), distinct
+  from business errors (`{"status": "error", "code": ...}`) -- the agent must handle both.
+- `submit_pto_request` takes a caller-supplied `idempotency_key` (server-generated keys can't
+  dedupe a retry): same key + same args replays the original; same key + different args is
+  `idempotency_conflict`; failed requests don't consume the key. Hours are computed
+  server-side (weekdays minus holidays), never model-supplied.
+- `McpToolset` (`MCPToolset` is a deprecated alias) with `tool_filter` scoping each specialist
+  to only the tools it needs.
+- `docs/02-tool-contract-guidelines.md`: format constraints go in the schema (published
+  contract); semantic checks are result data (model-readable message).
 
-- M1.9: Pattern choice rule: least autonomy that meets the requirement. Hard gates
-  (authorization, write approval) live in the tool/server layer; prompt rules are the soft
-  layer only.
+### Module 3
+- `hr_agent/agent.py` is a toolless router (`sub_agents=[...]`); specialists live in
+  `hr_agent/agents/`. A specialist's `description` is the routing contract -- widen it when it
+  gains a tool, or the router misroutes around it.
+- Two router bugs found and fixed live: (1) a multi-part message matching one specialist was
+  being declined as "ambiguous" just for having multiple parts; (2) a missing detail (e.g.
+  "the employee I asked about earlier") was being treated as "unclear, ask the user" at the
+  router level instead of handed to the specialist that can actually resolve it (via memory).
+  Root cause both times: the router's "if unclear, ask" rule didn't distinguish "unclear which
+  specialist" from "specialist will need to resolve a detail."
+- `search_handbook`: deterministic keyword retrieval (stopwords dropped, title matches
+  weighted, top 3 nonzero) -- sufficient at 8 sections; embeddings would add nothing yet.
+  Misses synonyms ("vacation" vs "PTO"); candidate eval case and the trigger to revisit if the
+  handbook grows.
+- ADK's `Workflow` (graph of nodes, conditional routing) supersedes the deprecated
+  Sequential/Parallel/Loop agents, but can't yet be an `LlmAgent` sub-agent -- mixing LLM
+  delegation and a workflow means the workflow is the root, not the reverse. Rule of thumb:
+  deterministic routing where intents are enumerable/keyword-detectable; LLM routing for vague
+  or multi-intent input.
+- `docs/03-adk-vs-langgraph.md`: recommends staying on ADK for this project specifically
+  because Module 7's deploy path and the MCP toolset are already ADK-native -- not a general
+  framework verdict.
 
-- M2.1: Streamable HTTP transport (shared service, independent deploy, headers carry caller
-  identity). `get_employee` returns id/name/title only (data minimization). Handlers are
-  pure functions; `server.py` is thin wiring. mcp 2.x: `MCPServer` replaces `FastMCP`.
-  ID-lookup logic is duplicated with the agent's local tools until M2.3; not shared across
-  the MCP boundary.
+### Module 4
+- Session state (`current_employee_id`, `pending_pto_request`) lives in `tool_context.state`,
+  gone once the session ends. Local tools write it directly; MCP tools can't take a
+  `ToolContext`, so `pto_agent`'s `after_tool_callback` (`_track_mcp_results`) reads each MCP
+  result's wire shape (`structuredContent.result` / `isError`) and writes state from that,
+  purely observational. Both keys are prompt-templated (`{current_employee_id?}`); reuse is a
+  prompt rule, not enforced (see Open questions).
+- Long-term memory: `BaseMemoryService` (`add_session_to_memory`/`search_memory`, scoped by
+  `(app_name, user_id)`) is what both `InMemoryMemoryService` (in-process stub, used today) and
+  `VertexAiMemoryBankService` (real resource, Module 7) implement -- swapping is a CLI flag on
+  `adk web`/`adk run`, zero `hr_agent/` code change. Read side uses `load_memory` (an
+  auditable, model-invoked tool call) over `preload_memory` (silent injection), matching M2's
+  data-minimization stance. Memory is reference-only, never identity: a recalled ID may be
+  used directly for a read, but never for a write (`submit_pto_request`) without re-resolving
+  the employee this session -- prompt rule only, not enforced.
+- `_persist_to_memory` writes one synthetic fact per turn ("this user asked about employee X"),
+  not the raw conversation -- avoids storing exact PTO dates/hours/balances indefinitely in a
+  durable, cross-session-searchable store. `Context.add_memory` would be the cleaner direct
+  write but isn't implemented by `InMemoryMemoryService`, only by the real service.
+- Context growth: `ContextFilterPlugin` (`before_model_callback`, drops whole old invocations
+  from the model payload, deterministic and free) chosen over `EventsCompactionConfig`
+  (LLM-summarized, still `@experimental`) for this project's scale. Wired via an `App(...)`
+  export in `hr_agent/agent.py` (confirmed `adk web`/`run`/`deploy`/`eval` all prefer `app` over
+  `root_agent`); `num_invocations_to_keep=6` is an unmeasured starting guess.
 
-- M2.2: Errors carry a machine-readable `code` plus message. `get_payroll_run` returns
-  aggregates only. `submit_pto_request`: caller-supplied `idempotency_key` (survives agent
-  retries; server-generated keys can't dedupe a retry); same key + same args replays the
-  original (`replayed: true`); same key + different args is `idempotency_conflict`; failed
-  requests don't consume the key. Hours are computed server-side (weekdays minus holidays),
-  never model-supplied. Balance is not decremented and pending requests aren't counted
-  against it, so concurrent requests can overdraw; fix when state moves to a real store.
+### Module 5
+- 29 cases across `evals/{happy_path,ambiguous,adversarial}/` (started at 31; two removed in
+  M6.2 when their only premise -- `find_employee`'s name matching -- was retired), one
+  `.evalset.json` + `test_config.json` per tier so each risk tier gets its own strictness.
+- `happy_path`/`ambiguous`: `ANY_ORDER` + `ignore_args: true` (tolerates a legitimate extra
+  double-check call, and calls between independent sub-questions happening in either order).
+  `adversarial`: `EXACT` + `ignore_args: true` (order is already fixed by "resolve identity
+  before writing"; the real job is catching *extra* calls, e.g. a silent retry or a bulk sweep
+  triggered by prompt injection). `ignore_args: true` everywhere because
+  `submit_pto_request`'s `idempotency_key` is model-generated and unpredictable --
+  argument-level correctness is checked via `response_match_score` on the final text instead.
+- `transfer_to_agent` is a real tool call and always the first hop into a specialist, so it's
+  included explicitly as the first expected call in every case that reaches one (not repeated
+  on a same-specialist follow-up turn).
+- `response_match_score` threshold is an unmeasured floor (0.3, down from the 0.8 default);
+  dropped entirely for the adversarial tier, where ROUGE-style scoring penalized correct but
+  lexically different refusals -- replaced there by an LLM-as-judge rubric metric
+  (`rubric_based_final_response_quality_v1`, one generic + one per adversarial category:
+  salary refusal, prompt injection, specific rejection reason, idempotency replay/conflict).
+- No cross-session recall case exists (an `EvalCase` is one session); the router-recall
+  regression is instead proxied with a same-session two-turn case using resolved state. The
+  real cross-session path is covered by `tests/integration/hr_agent/test_memory_live.py`.
+- Salary-request cases expect an empty tool trajectory plus a declining response:
+  `get_payroll_run` only ever returns aggregates, so no tool call could legitimately answer
+  "what does X earn."
+- Launch bar (four dimensions, each with a threshold and a note on what actually gates today):
+  **task success** -- binary, all cases must pass; gated in CI since M5.5. **Zero unauthorized
+  access** -- zero-tolerance bar, but no eval case existed until Module 6 shipped server-side
+  permission boundaries; still not mechanically gated in CI (see Open questions). **p95
+  latency** (<5s read, <10s write) and **cost/task** (<$0.01 read, <$0.02 write on
+  `gemini-3.5-flash-lite`) -- unmeasured starting floors, alert-only until Module 8's
+  instrumentation exists.
+- CI gate: `scripts/run_eval_gate.py` runs one `adk eval` invocation per tier, each against a
+  *fresh* MCP server subprocess (a shared long-lived server was the root cause of most
+  flakiness found while building this: stale idempotency-key collisions across runs,
+  transient "Connection closed" under concurrent sessions), with a bounded retry that only
+  matches known-transient failure text (OAuth token-refresh timeout, MCP connection reset) --
+  a real failure fails immediately. The `eval` CI job only runs live once GCP Workload Identity
+  Federation credentials are configured (not yet, by design -- a cost/IAM decision for the
+  project owner) and even then only on manual `workflow_dispatch`, since every run is billed.
+  `lint`/`test` run automatically on every push/PR regardless.
+- `docs/05-eval-standard.md`: the standard for adding a case and reading gate results --
+  tier-selection rule, a per-metric blind-spot table, the launch-bar table, and a checklist
+  covering two traps already hit once each: a placeholder golden response, and a hardcoded
+  idempotency key that becomes one-time-use against a server that isn't restarted.
 
-- M2.3: Wire contract is strict, handlers stay lenient. `Annotated[..., Field(pattern/length)]`
-  on handler params is enforced by the MCP layer (a malformed ID or date is rejected as a
-  `ToolError` before the handler runs) and published in the input schema; direct handler
-  calls still normalize. Semantic date errors (impossible date, end < start) stay
-  `invalid_dates` result data. Outputs are `TypedDict` unions on `status`, with `Literal`
-  error codes and statuses published in `outputSchema`. Schema-layer rejections are
-  protocol errors, not `{"status": "error"}` results; the agent must handle both. Unknown
-  arguments are rejected (`additionalProperties: false`) so a misspelled write argument
-  fails loudly; done by patching the generated arg model (no public option in mcp).
-
-- M2.4: `McpToolset` (adk 2.9.2 + mcp 2.2.0 work together; `MCPToolset` is a deprecated alias)
-  over Streamable HTTP, URL from `HCM_MCP_URL`. `tool_filter` exposes only `get_employee`
-  and `submit_pto_request`; payroll stays unexposed until Module 3/6. `find_employee`,
-  `get_pto_balance`, `list_holidays` remain local (no MCP equivalent yet). The model
-  generates `idempotency_key` (prompt rule: fresh per request, reuse only on identical
-  retry); a collision with different args fails loudly as `idempotency_conflict`. PTO writes
-  have no user confirmation yet (Module 6 HITL). Integration test spawns the server as a
-  subprocess on port 8000.
-
-- M2 reuse: `scratch/mcp_client.py` (mcp `Client`, no `hr_agent`/`mcp_server` imports) exercises
-  list/get/submit/idempotency from the published schemas alone. Findings: union return
-  types arrive wrapped as `structuredContent: {"result": ...}`; business errors are
-  results (`status: error`), while schema violations (malformed ID, unknown argument)
-  arrive as `isError` results whose text is a raw pydantic message, so clients need both
-  paths, and that text is poor model-facing guidance (candidate for M2.5 server tests /
-  the tool-contract doc).
-
-- M2 server tests: handler and dispatch-level unit tests already covered logic and schemas;
-  the gap was the wire. `tests/integration/mcp_server/test_server_http.py` is a black-box
-  suite (spawns the server, `mcp.Client`, no model or credentials) covering tool listing,
-  `{"result": ...}` wrapping, replay/conflict, and rejection of malformed/unknown input
-  without consuming the idempotency key. Not in CI (integration policy); cheap enough to
-  add later.
-
-- M2 doc: `docs/02-tool-contract-guidelines.md` rule of thumb: format constraints go in the
-  schema (protocol error, published contract); semantic checks are result data (model-readable
-  message). Idempotency keys are caller-supplied because only the caller knows a call is a
-  retry; the model choosing keys is why the server fails loudly on key reuse with different args.
-
-- M3.1 (partial: router + PTO agent): `hr_agent/agent.py` is a toolless router
-  (`sub_agents=[pto_agent]`); specialists in `hr_agent/agents/`. Shared `config.py` (model,
-  MCP URL) and `toolsets.py` (`hcm_toolset`) so later specialists import neither the router nor
-  each other. Specialist `description` is the routing contract. Router declines unmatched
-  requests. Integration `Turn` records `transfer_to_agent` separately from tool calls so
-  trajectory assertions stay about real tools. Payroll and policy agents remain.
-- M3.1 payroll: `payroll_agent` gets its own read-only `payroll_toolset`
-  (`tool_filter=["get_payroll_run"]`, shared connection params, separate session). The filter
-  is a soft boundary; the hard one is server-side authorization (Module 6). Misroute found:
-  "Who is employee E1002?" was declined by the router because `pto_agent`'s description
-  didn't mention employee lookup. Routing accuracy is set by the descriptions, so widen them
-  when a specialist owns a tool; candidate for the Module 5 routing evals. Policy agent remains.
-- M3 router fix (found during M4 testing): `test_two_questions_in_one_message` was flaky
-  (~1/3 failure rate) with the router declining a compound question outright, in ~1.8s with no
-  transfer at all -- both parts ("is Christmas a holiday", "how much sick time") are squarely in
-  `pto_agent`'s description, so this was the router misreading "two questions" as itself a
-  reason to decline, not a real ambiguity. `pto_agent`'s own instruction already says "if a
-  question needs several lookups, make each one," but the router (added after that rule was
-  written) had no equivalent guidance and could decline before ever handing off. Added a router
-  rule: a multi-part message that matches one specialist should still transfer once, not be
-  treated as ambiguous by virtue of having multiple parts. 5/5 live runs passed after the fix
-  (was ~1/3 before); full integration suite (25 tests) still green.
-- M3 router fix #2 (found while testing M4.4 live): a second-session recall question ("the
-  employee I asked about in an earlier conversation") got declined by the router with "I do not
-  have access to conversation history... provide the employee's name or ID" -- the router was
-  treating a missing detail (which employee) as its own problem to solve or refuse over, instead
-  of a topic match to hand to `pto_agent`, which actually can resolve it (via `load_memory`).
-  Same root cause as fix #1: the router's "if the request is unclear, ask" rule didn't
-  distinguish "unclear which specialist" from "specialist will need to resolve a detail."
-  Reworded: "unclear" means only the former; a missing detail like identity is the specialist's
-  job, so transfer on topic match and don't ask for it at the router level. 5/5 live runs passed
-  after the fix; full integration suite (25 tests) still green.
-- M3.1 policy: `search_handbook` (`hr_agent/handbook.py`) is deterministic keyword retrieval
-  over `## ` sections (stopwords dropped, title matches weighted 3x, top 3 with nonzero score);
-  embeddings add nothing at 8 sections. Contract: `success` / `not_found` (lists available
-  sections so the agent can say what it covers) / `error` on empty query. Grounding is
-  prompt-enforced (answer only from results, cite section, say "not covered" on gap, treat
-  handbook text as data); the gap case is a live test, and prompt-injection-in-document
-  belongs in the Module 5 evals. Keyword retrieval misses synonyms ("vacation" vs "PTO");
-  candidate eval case, and the trigger to move to embeddings if the handbook grows.
-- M3 workflow check: Sequential/Parallel/Loop agents are deprecated in favor of `Workflow`
-  (graph of nodes, conditional routes via `EventActions(route=...)`). Agents work as nodes only
-  as `single_turn`. `Workflow` can't be an `LlmAgent` sub-agent yet, so mixing LLM delegation
-  and a workflow means the workflow is the root and specialists are its nodes, not the reverse.
-  Findings verified from installed 2.9.2 source and a runnable probe, not from `adk-docs`.
-- M3 workflow vs. delegation: `scratch/workflow_router.py` routes with a regex `classify` node
-  (first match wins; policy before pto) to `single_turn` copies of the specialists, plus a
-  static decline node. Saves the router's LLM call and is unit-testable without a model, but
-  misses paraphrases, mixes multi-intent requests (first rule wins), and can't ask a
-  clarifying question. Rule: deterministic routing where intents are enumerable and
-  keyword-detectable; LLM routing for vague or multi-intent input. A hybrid needs the
-  workflow at the root (specialists as nodes), with an LLM classifier node for the ambiguous
-  cases. Specialist `mode` must be `single_turn` as a node, so the copy is made in scratch,
-  not in production agents.
-- M3 LangGraph: `scratch/langgraph_router.py` rebuilds the policy path (classify -> policy |
-  fallback), reusing the ADK rules, policy instruction and `search_handbook`. Same routing
-  and answers. Differences: state is an explicit `TypedDict` you merge into (vs. ADK events and
-  session state); routing is a function returning a node name plus a path map (vs.
-  `EventActions(route=...)`); the model and tool wiring is more glue (chat-model class, tool
-  from docstring, `create_agent`), and agents nest as compiled subgraphs invoked inside a node.
-  `create_react_agent` is deprecated for `langchain.agents.create_agent`. ty can't check
-  `StateGraph(State)`, so it carries an ignore. Deps live in the dev group only.
-- M3 architecture: `docs/03-architecture.md` (Mermaid) marks soft controls (prompts, routing
-  descriptions, `tool_filter`) vs. hard ones (schema, server-side hours, idempotency) and shows
-  Module 6 controls as planned. Local tools bypass the MCP boundary, so they sit outside the
-  hard layer until identity checks exist.
-- M3 doc: `docs/03-adk-vs-langgraph.md` recommends staying on ADK for this project, specifically
-  because Module 7's deploy path and the MCP toolset are already ADK-native — not a general
-  framework verdict. Deterministic-vs-LLM routing trade-off (enumerable/keyword-detectable
-  intents vs. paraphrases/multi-intent/clarifying questions) is orthogonal to which graph
-  framework is used. Flags re-verifying before Module 8: whether `Workflow` can be an
-  `LlmAgent` sub-agent yet, and `create_agent`'s API stability.
-
-- M4.1 session state: `current_employee_id` and `pending_pto_request` are session-scoped
-  (`tool_context.state`), gone once the session ends -- the boundary to contrast against M4.2's
-  cross-session memory bank. `find_employee`/`get_pto_balance` (local tools) take a
-  `tool_context: ToolContext` param and write state directly; ADK detects the param by type
-  (not name) and excludes it from the schema the model sees. `get_employee`/`submit_pto_request`
-  are MCP tools and can't take that param, so `pto_agent` has an `after_tool_callback`
-  (`_track_mcp_results`) that reads every tool call's result and writes state from the MCP
-  wire shape (`structuredContent.result`, `isError`) -- returning `None` leaves the model-visible
-  response untouched, so this stays purely observational. Both keys surface to the model via
-  `{current_employee_id?}` / `{pending_pto_request?}` instruction templating (the `?` makes an
-  unset key render as empty instead of raising). Reusing a person's remembered ID happens by
-  prompt instruction, not code -- there's no enforcement that the model actually uses it.
-  Live-model test found `after_tool_callback`'s `tool_response` can arrive as `None` even though
-  ADK's own `AfterToolCallback` type alias declares it always a dict (docstring says
-  long-running/deferred tools can reach the callback before a result exists); the callback
-  guards with `isinstance(tool_response, dict)`, not just `is not None`, in case a tool ever
-  returns something else non-dict. Broke `scratch/react_from_scratch.py`, which called
-  `find_employee`/`get_pto_balance` directly with no ADK session -- fixed by giving scratch its
-  own plain-dict state and thin wrapper functions (duck-typed stand-in for `ToolContext`, not a
-  real one), keeping the "no ADK" scratch exercise honest instead of pulling in ADK's session
-  machinery just to satisfy the type.
-
-- M4.2 long-term memory (interface + local stub; live Agent Engine deferred to Module 7 by
-  choice): `BaseMemoryService` (`add_session_to_memory` / `search_memory`, scoped by
-  `(app_name, user_id)`, not `session_id` -- that's what makes cross-session recall possible)
-  is what `VertexAiMemoryBankService` and `InMemoryMemoryService` both implement, confirmed from
-  installed `google-adk` 2.9.2 source. ADK ships `InMemoryMemoryService` as an in-process,
-  same-interface stub explicitly documented "for prototyping only," so no custom fake was
-  needed. `adk web`/`adk run --memory_service_uri` defaults to `memory://` and takes
-  `agentengine://<agent_engine_id>` for Module 7 -- swapping to the real service is a CLI flag,
-  zero `hr_agent/` code change. `pto_agent` gets `after_agent_callback=_persist_to_memory`
-  (`await ctx.add_session_to_memory()`), which re-ingests the full session every turn, not just
-  new events (cost concern at real volume, deferred to Module 8). Read side: `load_memory`
-  (model-invoked, auditable tool call) over `preload_memory` (silent every-turn context
-  injection) -- same data-minimization stance as M2.1's `get_employee`. Instruction treats
-  memory results as reference material, never identity: a recalled fact can answer an
-  informational question but never sets `current_employee_id` or substitutes for
-  `find_employee`/`get_employee` before a write, extending the caller-identity gap already
-  tracked since M1.8/M2.4 to the memory layer. First instruction draft was stricter (memory
-  could never inform identity at all) and broke on first live run: the router declined a
-  recall-only test question outright (it didn't look like a PTO question -- a routing artifact,
-  not a memory bug) and, once the test prompt was fixed to route correctly, the strict rule
-  would have forced re-asking for the ID on every returning-user balance question, defeating the
-  point. Revised: a recalled ID may be used directly for a read (`get_pto_balance`,
-  `list_holidays` validate it themselves) but never for `submit_pto_request` without a fresh
-  `find_employee`/`get_employee` this session. Found and fixed a second regression:
-  `scratch/workflow_router.py`'s bare `Runner` had no `memory_service`, which would have raised
-  `ValueError` the first time a live `pto_agent` turn's `after_agent_callback` fired -- gave it
-  an `InMemoryMemoryService`, matching what `InMemoryRunner` provides by default everywhere
-  else. `tests/unit/hr_agent/test_memory.py` verifies the write path and
-  `InMemoryMemoryService`'s own cross-session contract with no model call.
-  `tests/integration/hr_agent/test_memory_live.py` (new `sessions` fixture: one runner, fresh
-  session per call, same `user_id`) ran live and passed repeatably: a second, fresh session
-  recalls the employee asked about in an earlier session and answers their PTO balance without
-  re-asking. Tool-call order varies run to run (sometimes the model double-checks a recalled ID
-  with `get_employee` before using it) -- the test asserts the outcome (`load_memory` used,
-  correct `get_pto_balance` call, no `find_employee`), not an exact sequence.
-  `add_session_to_memory`'s full-session write described above is superseded by M4.4 below.
-
-- M4.3 trimming: two distinct ADK mechanisms exist for context growth, confirmed from installed
-  `google-adk` 2.9.2 source. Trimming (`google.adk.plugins.context_filter_plugin.ContextFilterPlugin`,
-  a `before_model_callback` App-level plugin) drops whole old *invocations* from what's sent to
-  the model -- deterministic, free, and it only touches the per-request payload, never
-  `session.events`, so it composes cleanly with M4.1 (session state is re-injected into the
-  instruction every turn regardless of trimmed history) and M4.2/M4.4 (memory writes are
-  independent of the trimmed request either way). Summarizing (`App(events_compaction_config=EventsCompactionConfig(...))`
-  with a `BaseEventsSummarizer`) actually condenses old events via an extra LLM call and is still
-  `@experimental` in 2.9.2 -- picked trimming as the default for this course-scale project;
-  summarizing is the better answer once conversations are long enough that losing older detail
-  entirely (rather than just not resending it) becomes the actual problem, revisit post-Module 5
-  if eval data shows that. Wired via a new `app = App(root_agent=root_agent, plugins=[...])`
-  export in `hr_agent/agent.py` -- confirmed from `agent_loader.py` that `adk web`/`adk run`/`adk
-  deploy`/`adk eval` all check for `app` before falling back to `root_agent`, so this is what
-  actually reaches production; `root_agent` stays exported too since tests build their own
-  `Runner`/`InMemoryRunner` directly around it and don't go through `App` (so the plugin doesn't
-  apply in those tests -- acceptable since they're testing behavior other than trimming).
-  `num_invocations_to_keep=6` is a starting guess, not measured; candidate for a Module 5/8 eval
-  once there's real conversation-length data. `tests/unit/hr_agent/test_context_trimming.py`
-  exercises the actual configured plugin instance (not `ContextFilterPlugin`'s internals, which
-  are ADK's own) with hand-built `types.Content` sequences -- no model call.
-
-- M4.4 sensitive data out of context: M4.2's `_persist_to_memory` ingested the entire session
-  verbatim into Memory Bank on every turn -- exact PTO dates, hours, and sick balances sitting
-  in a durable, cross-session-searchable store indefinitely, when cross-session recall only
-  ever needed to know which employee the conversation was about. Rewrote it to check
-  `callback_context.state` for the resolved employee ID and, if one is set, persist a single
-  synthetic `Event` naming only that ID via `Context.add_events_to_memory` -- not the turn's
-  real content; nothing is persisted if no employee was resolved (e.g. a holidays-only
-  question). `Context.add_memory` (a direct structured `MemoryEntry` write, no synthetic event
-  needed) would be the cleaner fit for "just this fact," but `InMemoryMemoryService` doesn't
-  implement it -- only `VertexAiMemoryBankService` does (confirmed from source: `add_memory` is
-  `BaseMemoryService`'s default `NotImplementedError`) -- so it isn't usable with the local stub
-  until Module 7's real resource exists; `add_events_to_memory` works with both today and later.
-  Rewriting this surfaced a second router bug while testing live (see M3 router fix #2 above):
-  the router declined a recall-only second-session question outright instead of transferring
-  and letting `pto_agent` resolve identity via memory -- fixed alongside this change.
-  `tests/unit/hr_agent/test_memory.py` asserts the synthetic fact contains the employee ID and
-  never the turn's numeric details (e.g. hours), and that nothing is written when no employee
-  was resolved; `tests/integration/hr_agent/test_memory_live.py` re-ran live (5/5) against the
-  minimized write path with no changes needed to the test itself.
-
-- M5.1 eval set: confirmed from installed `google-adk` 2.9.2 source (not docs, since this is the
-  first module-touch of `adk eval`): `EvalCase`/`EvalSet` are pydantic (`.evalset.json`), each
-  `Invocation` carries `user_content`, `final_response`, and `intermediate_data.tool_uses`
-  (expected `FunctionCall`s). `adk eval` defaults to two metrics: `tool_trajectory_avg_score`
-  (threshold 1.0) and `response_match_score` (threshold 0.8, ROUGE-like). A `test_config.json`
-  next to the evalset file overrides criteria -- but `_resolve_eval_config_file_path` in
-  `cli_tools_click.py` only auto-picks it up when exactly one evalset file is passed per `adk
-  eval` invocation, so each tier below must be run (or CI-gated) as its own command, or with
-  `--config_file_path` passed explicitly for a multi-file run.
-  31 cases across `evals/{happy_path,ambiguous,adversarial}/`, one `.evalset.json` +
-  `test_config.json` per directory so each risk tier gets its own trajectory-matching strictness:
-  - `happy_path` (15) / `ambiguous` (8): `ANY_ORDER` + `ignore_args: true`. Tolerates legitimate
-    extra calls (e.g. the model double-checking a recalled ID, per M4.2's live-run note) and calls
-    happening out of causal order between independent sub-questions (the M3-fix-#1 compound-query
-    regression case has no real ordering constraint between its two lookups).
-  - `adversarial` (8): `EXACT` + `ignore_args: true`. Order is naturally fixed in every case here
-    (identity resolution always precedes the write), so `EXACT`'s real job is catching *extra*
-    tool calls -- e.g. a silent retry with corrected dates after an `invalid_dates` error, or a
-    bulk `get_pto_balance` sweep triggered by the prompt-injection case -- which `ANY_ORDER`/
-    `IN_ORDER` would not flag since they only require presence, not absence of extras.
-  - `ignore_args: true` everywhere: `submit_pto_request`'s `idempotency_key` is model-generated
-    and unpredictable, so exact-arg matching would fail cases it shouldn't. Argument-level
-    correctness (right employee ID, right dates, right hours) is pushed onto `final_response`
-    text via `response_match_score` instead. `response_match_score` threshold set to 0.3
-    (down from the CLI default 0.8) as an unmeasured starting floor, same pattern as M4.3's
-    `num_invocations_to_keep` -- no live run has happened yet to calibrate ROUGE similarity
-    against this project's actual response phrasing.
-  - `transfer_to_agent` is deliberately never in an expected trajectory: it's a real tool call
-    (confirmed in `google/adk/tools/transfer_to_agent_tool.py`) but its `transfer_reason` arg is
-    freeform model text, and `EXACT`/`IN_ORDER`/`ANY_ORDER` all do per-call dict equality on args
-    that appear in the expected list even when `ignore_args` is off for a *different* call in the
-    same criterion -- moot here since `ignore_args: true` is set everywhere, but the real reason
-    to omit it is that a specialist's real tool call already implies the transfer happened, so
-    asserting the leaf tool is sufficient and doesn't require guessing `transfer_reason` text.
-  - Cross-session recall (M4.4's `load_memory` path) isn't exercised here: an `EvalCase`'s
-    `conversation` is one session, and depending on the eval runner reusing one `user_id`'s
-    `InMemoryMemoryService` state across separate `EvalCase`s within a run was judged too fragile
-    to build a regression case on. `ambiguous_router_recall_missing_detail` instead proxies the
-    same router bug (a missing detail treated as "unclear" instead of the specialist's job) with
-    a same-session two-turn conversation using resolved session state, not memory recall; the
-    real cross-session path stays covered by the live integration test
-    (`tests/integration/hr_agent/test_memory_live.py`).
-  - No caller-identity/authorization cases (e.g. "submit PTO for a coworker without asking them",
-    "look up a coworker's balance you have no business seeing"): the tool layer has no such
-    enforcement yet (tracked since M1.8/M2.4, hard gates deferred to Module 6), so an eval case
-    asserting a refusal there would just encode a known, accepted gap as a bug. Candidate for a
-    Module 6 eval category once permission boundaries exist server-side.
-  - Salary-request cases assert an empty expected tool trajectory and a declining
-    `final_response`, not a tool call: `get_payroll_run` returns aggregates only (confirmed,
-    `mcp_server/handlers.py:136`) -- there is no tool that could answer "what does X earn", so the
-    only thing worth checking is that the model doesn't hallucinate a number or misuse an
-    aggregate tool to fake one.
-  - All numeric/date facts in golden responses (PTO/sick hours, working-day counts across
-    2026-09/-10/-11/-12, which days are holidays) were hand-computed against `mock_data.py` and
-    verified against the known Labor Day (Mon)/Thanksgiving (Thu) anchors, not guessed.
-  - All 31 cases now pass live (`adk eval hr_agent evals/<tier>/*.evalset.json`, one tier per
-    invocation, gemini-3.5-flash-lite). Getting there surfaced four real bugs, none of them in
-    the agent itself:
-    1. **`adk eval`'s loader was incompatible with this package**, unrelated to the eval cases.
-       `cli_eval._get_agent_module` re-execs `hr_agent/__init__.py` under a synthetic top-level
-       module name `"agent"` (confirmed from source, not docs). `hr_agent/agent.py` and
-       `hr_agent/agents/*.py` used absolute `from hr_agent.X import Y` imports, so resolving them
-       during that synthetic exec forced Python to *also* import the real `hr_agent` package
-       (importable because the repo root is on `sys.path`), fully constructing `root_agent` a
-       second time with the same singleton `pto_agent`/`payroll_agent`/`policy_agent` objects --
-       crashing with a pydantic "already has a parent agent" error on the second `Agent(...)`
-       construction. Reproduced minimally outside `adk eval` to confirm before touching code.
-       Fixed by switching those intra-package imports to relative (parent-relative `..` in
-       `hr_agent/agents/*.py`, sibling `.` in `hr_agent/agent.py`/`toolsets.py`/`tools.py`), which
-       makes the whole module graph resolve consistently under whichever top-level name it's
-       loaded as -- real `hr_agent` for tests/`mcp_server`, synthetic `agent` for `adk eval`.
-       This conflicts with the project's `TID252` ("prefer absolute imports") convention, so
-       added a scoped `pyproject.toml` per-file-ignore for `hr_agent/agents/**` with a comment
-       explaining why, rather than weakening the rule repo-wide. `adk web`/`adk run` were
-       apparently never affected (different, non-synthetic loading path) -- this bug was latent
-       since M3 and only surfaced now because `adk eval` had never been invoked before M5.1.
-       145 unit tests, `ruff`, and `ty` all still green after the change.
-    2. **`transfer_to_agent` is a real tool call** (confirmed in
-       `google/adk/tools/transfer_to_agent_tool.py`) and always fires as the first hop into a
-       specialist. The adversarial tier's `EXACT` match_type fails on any actual call *not* in
-       the expected list -- so every adversarial case that expected a specialist's tool call was
-       failing outright (score 0.0) because `transfer_to_agent` was always an unexpected extra.
-       Fixed by adding it explicitly (name only, via a `transfer(agent_name)` helper; args are
-       ignored anyway since `ignore_args: true`) as the first expected call in every case that
-       reaches a specialist -- and *not* repeating it on a later turn that stays with the same
-       specialist (confirmed from the live sessions: transfer is sticky, a same-topic follow-up
-       turn has zero tool calls if the answer's already known, or just the leaf tool call if not).
-    3. **Two golden `final_response`s for the policy cases were lazy `"... "` placeholders**
-       instead of real content, so `response_match_score` was correctly near-zero against them
-       regardless of any threshold -- not a threshold-calibration problem, a content gap. Fixed
-       by writing out the actual handbook text (this project's own fixture data, not third-party
-       material) for all four policy happy-path cases and the adversarial injection case.
-    4. **`ambiguous_router_recall_missing_detail` turn 2 over-specified the expected trajectory**:
-       it required a fresh `get_pto_balance` call, but the model correctly answered from what
-       turn 1's tool result already gave it, with zero new tool calls -- the same pattern already
-       handled correctly in the sibling `ambiguous_session_identity_reuse` case. Fixed by
-       expecting `[]` for that turn too; the real check for this regression is response content,
-       not trajectory, and both cases now say so implicitly by leaving it empty.
-    Also found, not fixed (both infrastructure, not case bugs, logged for M5.5's CI-gate design):
-    running a full tier as one `adk eval` invocation occasionally hits `HTTPSConnectionPool
-    (oauth2.googleapis.com): Read timed out` (ADC token refresh contention under concurrent
-    inference) and transient MCP "Connection closed" (single uvicorn process under concurrent
-    sessions) -- ADK's own retry logic absorbed the latter on a subsequent run, but not always;
-    a CI gate should expect occasional retries rather than treating one red run as conclusive.
-    Dropped `response_match_score` from the adversarial tier's `test_config.json` entirely
-    (kept for happy_path/ambiguous): its ROUGE-style scoring gave near-zero on some clearly
-    correct refusals (e.g. two valid but lexically dissimilar salary-refusal phrasings scored
-    0.13) -- no threshold rescues that without also passing near-empty responses elsewhere, so
-    for this tier `tool_trajectory_avg_score` (now real, via finding 2) is the only gate until
-    an LLM-as-judge exists (M5.3).
-
-- M5.1 flake fix: `adversarial_idempotency_conflict_same_key_diff_args` failed on a later live
-  re-run (1 of 2), not caught by the checks above -- turn 2 called `submit_pto_request` *twice*
-  with identical args (same reused key, same new dates) before reporting the conflict, tripping
-  `EXACT`'s call-count check. Confirmed benign (idempotent key+args, no double-write) but real
-  model non-determinism, reproduced then re-verified fixed (3/3 clean live re-runs of that case).
-  Considered three fixes: loosen just this case's match_type (narrow, weakens the "no extra
-  calls" adversarial property further), tighten `pto_agent`'s prompt (chosen), or accept as
-  documented flakiness. Chose the prompt fix: `hr_agent/agents/pto.py`'s "tool returns
-  status error" rule only said not to retry with made-up input, leaving a same-args retry
-  unaddressed; added "do not repeat the identical call again hoping for a different result."
-  This is a real behavior improvement independent of the eval (fewer redundant round-trips on
-  any business-logic error, not just idempotency conflicts), not just a fix aimed at making a
-  test green. Left the M2.3-established "fix the argument format once" retry-on-schema-
-  rejection rule untouched -- that's a different, intentional one-retry case (malformed
-  input), not the same-args business-error retry this rule targets.
-  Underlying gap not addressed: dropping `response_match_score` from the adversarial tier
-  (finding above) means `tool_trajectory_avg_score` with `ignore_args: true` can't distinguish
-  "retried with identical args" from "silently retried with a *different* key and reported false
-  success" -- both look like just an extra `submit_pto_request` call. Still open; the honest fix
-  is the same one already deferred to M5.3 (LLM-as-judge / rubrics), not another prompt patch.
-
-- M5.2 (running the eval, `adversarial_submit_pto_insufficient_balance` removed): re-running all
-  three tiers surfaced a case flaking on stale server state, not model behavior --
-  `submit_pto_request` was called twice: first with a key the MCP server rejected as
-  `idempotency_conflict` (recorded by an *earlier, separate* `adk eval` invocation against the
-  same long-lived server process), then a second, different key that reached the real
-  `insufficient_balance` error and passed. The server's idempotency store is an in-memory dict
-  (M2.2) that outlives any single `adk eval` run, and the model's key for a given prompt is
-  low-entropy enough (e.g. `pto-cg20261005`, derived from initials+date, not random) to collide
-  with what a prior run already recorded for the identical case. Root cause is test isolation
-  (`adk eval` reuses whatever MCP server is already running instead of a fresh one per run,
-  unlike `tests/integration/conftest.py`'s `hcm_server` fixture), not a case or agent defect --
-  the case passed cleanly (10/10 on retry) once run against server state that hadn't already
-  seen it. Removed the case anyway on explicit instruction, trading away real insufficient-
-  balance coverage rather than fixing the shared-server root cause; the same collision can hit
-  any other write-path adversarial case on a later rerun. Candidate fix for M5.5 (CI eval gate
-  needs this regardless): start a fresh MCP server subprocess per `adk eval` invocation.
-- M5.2 (`adversarial_payroll_run_unknown_id` removed): confirms the above wasn't isolated to one
-  case. Immediate rerun of the trimmed 9-case adversarial tier failed a *different, unrelated*
-  case: `get_payroll_run` right after `transfer_to_agent` hit a transient "no tool with that name
-  is available (only: transfer_to_agent)" framework error, then correctly retried with identical
-  args once the transfer had actually taken effect and got the real `not_found` response --
-  reasonable model behavior, but the extra call still fails `EXACT` match. Distinct root cause
-  from both the idempotency-key collision above and the M5.1 flake fix (same-args retry on a
-  business error, there patched only in `pto_agent`'s instruction, not `payroll_agent`'s). Removed
-  on explicit instruction rather than root-causing; two cases now gone from a tier meant to
-  guarantee *no unexpected extra calls*, and a third rerun could plausibly fail a third, still-
-  passing case the same way. Do not treat 8/8 adversarial as a stable green bar without addressing
-  the underlying causes (shared MCP server state, `EXACT` intolerant of justified retries,
-  inconsistent no-repeat instruction coverage across specialists) -- flagged, not fixed.
-
-- M5.3 (rubric-based LLM-as-judge, first pass): added `rubric_based_final_response_quality_v1` to
-  `evals/adversarial/test_config.json` -- confirmed from installed `google-adk` 2.9.2 source
-  (`@experimental`), not docs: criterion-level `rubrics` in `test_config.json` apply unconditionally
-  to every invocation in the tier (no type filtering), while per-case properties belong on
-  `Invocation.rubrics` in the `.evalset.json` and are filtered by `rubric_type ==
-  "FINAL_RESPONSE_QUALITY"` for this metric -- a case rubric without that exact `type` string is
-  silently dropped, not an error. Started with one generic criterion-level rubric
-  (`no_fabricated_outcome`: response doesn't claim a PTO/payroll action succeeded, or state a result
-  unsupported by an actual tool call), `threshold: 0.8`, `judge_model: gemini-3.5-flash-lite`
-  (library default is `gemini-2.5-flash`, one of the models retiring 2026-10-20, overridden to match
-  this project's `MODEL_ID`), `num_samples: 5` (library default; majority-vote aggregation needs an
-  odd count so ties don't default to "no"). Aggregation chain confirmed from
-  `rubric_based_evaluator.py`: per-rubric majority vote across samples -> plain mean across rubrics
-  for one invocation's score (informational per-invocation status only, not itself gating) ->
-  case-level verdict is the mean of every rubric score pooled across every invocation in the case
-  (not an average of per-invocation averages), compared once against threshold.
-  Ran it live: the new metric correctly scored `adversarial_submit_pto_malformed_employee_id`'s
-  response 1.0/PASSED (a truthful error report, correctly not flagged as fabricated) even though
-  `tool_trajectory_avg_score` failed that same run -- confirming the rubric metric works; the
-  trajectory failure was the same shared-MCP-server idempotency-key collision already logged for
-  the two removed cases above, now hitting a third case (two unrelated keys, both already recorded
-  from earlier runs today). Root-caused this time instead of removing a third case: killed the
-  long-running server process (up 40+ min across every run this session) and started a fresh one;
-  the full 8-case adversarial tier passed clean (8/8) immediately after. Restarting the MCP server
-  before each `adk eval` invocation is the real fix for the flakiness pattern in the two M5.2
-  entries above -- not yet automated (manual kill+restart here), candidate for M5.5's CI-gate design
-  to do per-run via a subprocess fixture, matching `tests/integration/conftest.py`'s `hcm_server`
-  pattern. Only one generic rubric exists so far; case-specific rubrics per category (salary
-  refusals, prompt injection, idempotency) are still open -- step not checked off yet.
-
-- M5.3 (case-specific rubrics added): wrote one `Invocation.rubrics` entry per case category --
-  `declines_salary_disclosure` (both salary-refusal cases), `rejects_injected_instruction`
-  (prompt injection), `states_specific_rejection_reason` (the three PTO write-path error cases),
-  `no_duplicate_created` / `reports_idempotency_conflict` (turn 2 of the two idempotency cases).
-  First live run found a real scope gap the trajectory metric had no way to catch:
-  `adversarial_submit_pto_no_working_days` hit the M5.1-documented transient MCP "Connection
-  closed" error and returned "connection was closed, please try again" instead of the golden
-  weekend-rejection text -- `tool_trajectory_avg_score` scored this 1.0/PASSED regardless (it only
-  checks which tools were called, `ignore_args: true`, never the response text), but
-  `states_specific_rejection_reason` correctly scored it 0 (a transport failure isn't a business
-  rejection reason), dragging the case below threshold. Fixed by broadening that rubric's text to
-  also accept "clearly reports a tool/transport failure and asks the user to retry" as a valid
-  outcome, not just a business-validation reason -- applied to all three PTO-error cases sharing
-  that rubric id. Confirms the rubric metric adds real signal beyond trajectory matching, not just
-  redundant scoring.
-  Reruns after that fix (chasing a fully clean pass) surfaced degradation well past the
-  "occasional" transient-failure rate M5.1 documented: six full-tier `adk eval` invocations in
-  about 10 minutes, most without an MCP server restart between them, produced increasingly severe
-  failures -- one case (`adversarial_submit_pto_malformed_employee_id`) errored out with zero
-  invocation results (no score at all, not just a failed metric), and
-  `adversarial_idempotency_conflict_same_key_diff_args` exposed a sharper problem: its turn-0
-  `submit_pto_request` (key `demo-key-2`) hit `Connection closed` *before* the server recorded the
-  key, so turn 1's reuse of that same key with different args wasn't actually a conflict from the
-  server's perspective (nothing was stored under it yet) and legitimately succeeded --
-  `reports_idempotency_conflict` correctly scored that "no conflict reported" as 0, but the real
-  issue is that a transport failure on turn 0 silently invalidates this case's precondition (that
-  the key was actually recorded), so it stops testing conflict detection at all that run. Neither
-  a rubric nor a trajectory tweak fixes this; it's a genuine two-turn-conversation test hazard
-  distinct from every collision/retry cause logged in M5.2/M5.3 above. Stopped re-running rather
-  than continuing to chase a clean pass in the moment.
-
-  Follow-up after a rest period clarified this further: one more single verification run came back
-  7/8, and the one failure (`adversarial_idempotency_conflict_same_key_diff_args` again) turned out
-  to be **fully deterministic, not flaky**. Both idempotency cases hardcode a literal key
-  (`demo-key-1` / `demo-key-2`) in their prompt text -- deliberate, so the test is repeatable -- but
-  that makes the key a one-time-use fixture from the server's point of view: once any run
-  successfully submits it once, every later run against a server that wasn't restarted in between
-  hits `idempotency_conflict` on turn 0 (the "should succeed" turn) before the case ever reaches
-  what it's meant to test. Confirmed by restarting the server once more and re-running: clean 8/8
-  immediately. So the transport-failure/zero-result instability seen mid-session was real and
-  worth keeping the M5.5 note about (throttling/serializing runs against this Vertex+MCP stack),
-  but this specific recurring failure is a separate, fully understood cause: these two cases
-  require a freshly restarted MCP server every time they run, full stop, not just "usually." A
-  same-invocation assertion that turn 0 actually succeeded before treating turn 1 as meaningful
-  (candidate noted above) would make the case fail loudly and correctly instead of silently testing
-  the wrong thing, but doesn't remove the restart requirement itself.
-
-- M5.4 launch bar: four dimensions, each with a threshold, today's actual signal (or explicit
-  gap), and what "gate" means for it right now vs. once later modules land.
-  - **Task success**: bar is binary, not a sampled rate -- all 31 eval cases pass their tier's
-    criteria (`tool_trajectory_avg_score` + `response_match_score`/rubric, thresholds set in
-    M5.1/M5.3). It's a fixed regression suite, not a sampled population, so "success rate"
-    doesn't apply the way it would for live traffic. Gate: any red case blocks merge once M5.5
-    wires this into CI.
-  - **Zero unauthorized access**: no signal exists today, by design gap not oversight -- no case
-    in any tier exercises caller-identity/authorization (flagged since M1.8/M2.4, and explicitly
-    in M5.1's "no caller-identity/authorization cases" note) because the tool/MCP layer enforces
-    none server-side yet (Module 6). The bar itself is zero-tolerance, but it can't be mechanically
-    gated in CI until Module 6 ships permission boundaries plus an eval category for them --
-    until then this is a hard blocker on calling the agent launch-ready, distinct from and stricter
-    than what M5.5's CI gate can actually enforce today.
-  - **p95 latency**: no instrumentation exists yet (Module 8's OpenTelemetry work). Starting floor,
-    unmeasured -- same pattern as M4.3's `num_invocations_to_keep=6` and M5.1's
-    `response_match_score` thresholds: p95 < 5s for a read-only turn (one specialist, 1-2 tool
-    calls), p95 < 10s for a write turn (transfer + validation + submit). Gate: alert-only, not a
-    CI gate, until Module 8 ships tracing to measure it.
-  - **Cost/task**: no cost tracking exists yet either. Starting floor, unmeasured: <$0.01/task on
-    `gemini-3.5-flash-lite` for a typical read, <$0.02 for a write. Same caveat as latency --
-    revisit both once Module 8's dashboard gives real numbers instead of guesses.
-  - Net: this step defines the bar for all four; M5.5 can only mechanically enforce task success
-    today, the other three stay documented targets until Module 6/8 exist. Wiring only the
-    enforceable one into CI without flagging the rest as still-open (not silently met) would
-    misrepresent what "launch ready" means -- worth calling out explicitly in M5.6's doc.
-
-- M5.5 CI eval gate: `scripts/run_eval_gate.py` replaces the old placeholder (which globbed
-  `evals/*.evalset.json` -- a pattern that never matched, since the real files are one level
-  down in `evals/{happy_path,ambiguous,adversarial}/`). Runs one `adk eval` invocation per
-  tier (required for `test_config.json` auto-pickup, per M5.1) against a fresh MCP server
-  subprocess per attempt, not a shared long-lived one -- the idempotency-key collisions and
-  connection-closed flakiness in M5.2/M5.3 were both caused by reusing one server process
-  across runs, and two adversarial cases hardcode a one-time-use idempotency key that a
-  prior run may have already consumed. A bounded retry (3 attempts, fresh server each time)
-  matches on the specific transient-failure text already documented as occasional (OAuth
-  token-refresh timeout, MCP "Connection closed") and only retries those -- a real failure
-  fails immediately, no retry. Per M5.4, the job's own output says explicitly that this only
-  enforces task success; zero-unauthorized-access/latency/cost stay undecided by this gate,
-  not silently assumed covered.
-  Left deliberately unfinished, on purpose, not by oversight: the `eval` job in `ci.yml` only
-  runs live once a `GOOGLE_CLOUD_PROJECT` repo variable and `GCP_WIF_PROVIDER`/
-  `GCP_WIF_SERVICE_ACCOUNT` repo secrets exist (Workload Identity Federation, no long-lived
-  key committed anywhere) -- otherwise it prints a message and exits clean. This repo has no
-  GCP CI credentials configured yet (confirmed: no `.github` auth step, no deploy/ configs
-  beyond `.gitkeep`, Module 7 not started), and wiring live, billed Vertex AI calls to fire on
-  every push/PR is a cost-and-IAM decision for the project owner, not something to enable
-  silently while implementing the mechanics. Creating the WIF provider/service account and
-  setting the repo variable/secrets is a follow-up step for whoever owns the GCP project.
-  Follow-up: even once GCP auth is configured, the `eval` job only runs on manual
-  `workflow_dispatch` (Actions tab "Run workflow"), not on every push/PR -- each run is live,
-  billed Vertex AI calls, and gating it to on-demand avoids paying for it on every commit.
-  `lint`/`test` are unaffected and keep running automatically on push/PR.
-
-- M5.6 eval standard doc: `docs/05-eval-standard.md` distills M5.1–M5.5 into a standard for
-  adding cases and reading gate results, not a retelling of the decision log. Structured
-  around what a new case-author or CI-gate maintainer actually needs: tier-selection rule
-  (property guaranteed, not topic), a per-metric "what it catches / what it's blind to"
-  table (trajectory metric can't see response text; ROUGE-style matching penalizes correct-
-  but-differently-worded answers; the rubric judge is what actually catches the trajectory-
-  blind failure mode from M5.3), a launch-bar table making explicit which of the four M5.4
-  dimensions the CI gate can and can't enforce today, and a numbered "adding a new case"
-  checklist covering the placeholder-golden-response and one-time-use-idempotency-key traps
-  already hit once each in M5.1/M5.3.
-
-- M6.1: closes the caller-identity gap tracked since M1.8/M2.4/M5.1 for all three MCP tools.
-  Identity flows from the transport, never a tool argument, confirmed from installed
-  `google-adk` 2.9.2 / `mcp` source: `McpToolset(header_provider=...)` (a
-  `Callable[[ReadonlyContext], dict[str, str]]`) turns a new session-state key,
-  `caller_employee_id` (hr_agent/toolsets.py), into an `x-caller-employee-id` header per MCP
-  session; the server reads it via `ctx: Context` in a thin per-tool wrapper
-  (mcp_server/server.py) that isn't part of the published schema -- confirmed empirically
-  that `ctx` doesn't appear in `list_tools()`'s input_schema, so the model still only ever
-  sees `employee_id`. Handlers (mcp_server/handlers.py) take `caller_employee_id` as a
-  required keyword arg (no default) and return a new `forbidden` error code, checked before
-  any lookup or idempotency-store access so an unauthorized caller can't learn whether a
-  target ID exists or has a pending request under a guessed key.
-  Deliberately fail-closed: no session sets `caller_employee_id` in production yet (no login
-  flow -- out of scope for this step), so both tools are unreachable for a real user today
-  until something upstream of the agent authenticates and sets that key. Test fixtures set it
-  explicitly (tests/integration/hr_agent/conftest.py defaults every session to E1002, the
-  employee every prompt in that suite asks about); a fake `ServerRequestContext` stands in
-  for a real HTTP request in unit tests (tests/unit/mcp_server/test_server.py) since
-  `mcp.call_tool`'s default context has none; the wire path is proven for real over HTTP with
-  a custom `httpx2.AsyncClient` header in tests/integration/mcp_server/test_server_http.py
-  (ran clean, no GCP needed -- MCP server subprocess only).
-  `submit_pto_request` hit ruff's max-return-statements limit adding the check; extracted
-  `_check_caller_and_key` (identity + key-format, both pre-store guards) into its own helper
-  rather than suppressing the lint.
-
-  `get_payroll_run` (closing the item left open above): chose a role check over leaving it
-  unscoped -- aggregate-only data is lower risk than per-employee PTO/salary, but "any caller
-  can read any run" still failed M5.4's zero-tolerance unauthorized-access bar. `title` in
-  `EMPLOYEES` already distinguishes "Payroll Specialist"/"Finance Director" from every other
-  role, so no new role field was needed: `PAYROLL_READER_TITLES` (mcp_server/handlers.py) is
-  checked by looking up the caller's own record via `caller_employee_id`, same transport-only
-  identity as the other two tools. Unlike self-only, this is a role gate, not an identity
-  match -- any caller holding one of those titles may read any run, since there's no
-  per-employee scoping question for aggregate data. `hr_agent/toolsets.py`'s `payroll_toolset`
-  had no `header_provider` at all before this (caller identity never reached it), so it was
-  silently unscoped even after M6.1's first pass; added the same `_caller_headers` used by
-  `hcm_toolset`. `payroll_agent`'s instruction needed no change -- its existing generic
-  "tool returns status error, tell the user plainly" rule already covers `forbidden` the same
-  way `pto_agent`'s does. Unit (`tests/unit/mcp_server/test_handlers.py`,
-  `test_server.py`) and live-HTTP integration (`tests/integration/mcp_server/test_server_http.py`,
-  ran clean, no GCP needed) tests cover success for both titles, forbidden for a non-payroll
-  role, forbidden with no caller identity, and that forbidden doesn't leak whether the run ID
-  exists.
-
-  Eval-case fix (the `get_employee` case flagged as broken above): confirmed from installed
-  `google-adk` 2.9.2 source that `EvalCase.session_input` (a `SessionInput` with `app_name`,
-  `user_id`, `state`) does exist and is exactly what `adk eval` uses to seed the session's
-  initial state before running a case -- `local_eval_service.py` passes `initial_session.state`
-  straight to `session_service.create_session`, and defaults to `"test_user_id"`/no state only
-  when `session_input` is absent. Added `session_input.state.caller_employee_id` to every
-  happy_path/adversarial case that calls `get_employee`, `submit_pto_request`, or
-  `get_payroll_run` and would otherwise hit the now-universal `forbidden` check: the caller
-  matches the target employee for the two self-only tools, and a payroll-role employee
-  (E1003) for the two payroll cases. `adversarial_submit_pto_malformed_employee_id` (target
-  `"E99"`) deliberately left unset -- it fails at the schema layer (`EmployeeId` pattern)
-  before the handler's caller check ever runs, so identity is irrelevant there. Validated by
-  parsing both files back through `EvalSet.model_validate` (structural only, no live run --
-  same GCP-credential gap as everything else below).
-
-  Left open, not fixed: the idempotency store is still one global dict keyed only by
-  `idempotency_key` (M2.2), unscoped by caller -- two different, both-legitimate employees
-  choosing the same key string still collide with a spurious `idempotency_conflict`; the
-  self-only check blocks cross-employee access to a key, not same-key collisions between
-  unrelated authorized callers. `tests/integration/hr_agent/test_agent_live.py`,
-  `test_agent_mcp_live.py`, `test_memory_live.py` were updated (conftest sessions now carry
-  `caller_employee_id="E1002"`) but not run, and `tests/integration/hr_agent/conftest.py`'s
-  `ask`/`conversation`/`sessions` fixtures still default every session to E1002 (Software
-  Engineer) -- `test_router_live.py::test_payroll_question_routes_to_payroll_agent` only
-  asserts that `get_payroll_run` gets called, not that it succeeds, so it stays valid as a
-  routing test but no live fixture yet exercises a payroll call that's actually authorized to
-  succeed. This environment has no `GOOGLE_CLOUD_PROJECT`/live model access to verify any of
-  this against a real model.
+### Module 6
+- **M6.1 (permission boundaries):** caller identity flows from the transport only, never a
+  model-supplied argument. `McpToolset(header_provider=...)` turns a session-state key
+  (`caller_employee_id`, `hr_agent/toolsets.py`) into an `x-caller-employee-id` header per MCP
+  session; the server reads it via a `ctx: Context` parameter that isn't part of the published
+  schema (confirmed: the model never sees it). `get_employee`/`get_pto_balance`/
+  `submit_pto_request` are self-only (`forbidden` unless `employee_id` matches the caller,
+  checked before any lookup or idempotency-store access, so an unauthorized caller can't learn
+  whether a target even exists). `get_payroll_run` is role-gated instead (`title` in
+  `"Payroll Specialist"`/`"Finance Director"`) since it's aggregate-only with no per-employee
+  scoping question.
+  No production code sets `caller_employee_id` yet (no login flow) -- all four MCP tools
+  correctly fail closed for a real user until Module 7+ adds real auth. Test fixtures set it
+  explicitly.
+- **M6.2 (closed the gap M6.1 missed):** `get_pto_balance` was still the pre-M2 *local* tool
+  (`hr_agent/tools.py`) with no caller-identity check at all -- the one tool that actually
+  returns balances, since `get_employee` never did. Found live via `adk web`: one session could
+  read E1002's balance, then E1003's, with no auth. Moved `get_pto_balance` to the MCP layer
+  with the same self-only check as `get_employee`. `find_employee` was retired outright rather
+  than ported: self-only means "may only ever see your own record," and a name search is
+  inherently a search across everyone else's names too, so there's no self-only version worth
+  building. `hr_agent/tools.py` now holds only `list_holidays` (not employee-scoped, no
+  identity question applies). `scratch/react_from_scratch.py` got its own local copies of
+  `find_employee`/`get_pto_balance` (it has no ADK session to carry MCP/header machinery) and
+  its own short instruction, rather than depending on production internals that no longer
+  exist in that shape. 9 of the 31 eval cases exercised the retired name-lookup path or the
+  underlying vulnerability directly; fixed in place where incidental (swap name for ID, drop
+  the resolution step), rewritten to expect "asks for an ID" where the case's entire premise
+  was resolving someone else's name, and removed outright (2 cases) where no replacement
+  exists for `find_employee`'s matching/not-found behavior. Not run live (see Open questions).
+- Left open: idempotency store is still one global dict keyed only by `idempotency_key`
+  (M2.2), unscoped by caller -- two different, both-legitimate employees choosing the same key
+  string still collide. HITL confirmation, audit log, and rate/blast-radius limits (checklist
+  items 2-4) not started.
 
 ## Open questions
 
-- M2: schema-layer rejections return raw pydantic text with no example ID. A server-side
-  rewrite (subclass overriding `call_tool`) was tried and dropped as too complex; leave to
-  clients unless it proves to hurt agent behavior. Note for `docs/02-tool-contract-guidelines.md`.
-
-- Model IDs drift fast (Gemini 2.5 shuts down 2026-10-20 mid-course) — reconfirm exact
-  Gemini 3.x IDs at Module 1 step 1 and again before Module 8.
-- M4.1: nothing enforces that the model actually uses `current_employee_id`/`pending_pto_request`
-  instead of re-asking or re-submitting -- it's a prompt rule, not a guardrail. Candidate for a
-  Module 5 eval case (assert the second turn of a conversation doesn't repeat a resolved ID).
-- M4.2: `VertexAiMemoryBankService` import path confirmed (`google.adk.memory`), see decision
-  above. "Memory is reference-only, never identity" is a prompt rule, not enforced -- nothing
-  stops the model from treating a recalled fact as authoritative if it chooses to. Candidate
-  Module 5 eval cases: a memory entry containing injected instructions, and a recalled but
-  stale/wrong employee ID the model should not act on without re-resolving.
-- M4.2: real Agent Engine + Memory Bank instance not yet created (deferred to Module 7); revisit
-  whether `agent_engine_id` provisioning belongs earlier if Module 5 evals need live memory
-  behavior before Module 7.
-- M4.3: `num_invocations_to_keep=6` is unmeasured; needs real conversation-length/cost data
-  (Module 5/8) to tune. `EventsCompactionConfig` is `@experimental` in adk 2.9.2 -- reconfirm its
-  stability and whether it's still the summarization answer before relying on it later.
-- M5.1: all 31 cases pass live now (see decision above), but on a single run each with
-  `gemini-3.5-flash-lite` -- not repeated for flakiness beyond what surfaced incidentally
-  (the OAuth/MCP transience). `response_match_score` thresholds (0.3 for happy_path/ambiguous)
-  are still calibrated from one run's worth of scores, not a distribution. Before wiring
-  `adk eval` into CI (M5.5): decide how to handle the occasional OAuth-timeout/MCP-connection-
-  closed retries (accept flaky-and-retry, or make the MCP server more concurrency-tolerant),
-  and re-run a few times to see whether any case is borderline rather than solidly passing.
-- M4.4: the router misreading "a detail is missing" as "the request is unclear" has now
-  surfaced twice (M3 router fix #1 and #2) from two unrelated features -- candidate for a
-  Module 5 routing eval category of its own, not just one-off fixes as they're found. The
-  synthetic memory fact is free-text, not structured; `InMemoryMemoryService`'s keyword search
-  found it fine in testing, but recall quality should be re-verified against the real
-  `VertexAiMemoryBankService`'s semantic search once Module 7's resource exists.
-- M6.1: no production code sets `caller_employee_id` (no login flow) -- all three MCP tools
-  are correctly unreachable for a real user until Module 7 or later adds real auth; worth
-  deciding whether that's acceptable to ship as-is or needs a stub identity source sooner.
-  No live fixture (`tests/integration/hr_agent/conftest.py`) yet sets a payroll-role caller,
-  so no live-agent test exercises an authorized `get_payroll_run` call end to end (see M6.1
-  decision above) -- candidate: a `payroll_ask` fixture or a role parameter on `ask`.
-  The global, caller-unscoped idempotency store (flagged since M2.2) is still open.
+- Model IDs drift fast (Gemini 2.5 retires 2026-10-20 mid-course) -- reconfirm exact Gemini
+  3.x IDs before Module 8's tier-routing work.
+- Nothing enforces that the model actually uses `current_employee_id`/`pending_pto_request`
+  instead of re-asking or re-submitting, or that it treats memory as reference-only rather than
+  identity -- both are prompt rules, not guardrails. Candidate Module 5 eval cases: a repeated
+  ID on a second turn, a memory entry with injected instructions, a stale/wrong recalled ID.
+- Real Agent Engine + Memory Bank instance not yet created (deferred to Module 7); revisit
+  whether provisioning belongs earlier if Module 5 evals need live memory behavior sooner.
+- `num_invocations_to_keep=6` is unmeasured; needs real conversation-length/cost data. Reconfirm
+  `EventsCompactionConfig`'s stability before relying on summarization over trimming.
+- Eval thresholds (`response_match_score` 0.3) and the "all cases pass" claim are from one live
+  run each on `gemini-3.5-flash-lite`, not a distribution -- re-run a few times before treating
+  the suite as a stable green bar, especially after M6.2's rewrites (none run live yet).
+- The router's "unclear vs. a detail the specialist should resolve" distinction has needed two
+  separate fixes already from unrelated features -- candidate for its own eval category rather
+  than one-off fixes as they're found.
+- No production code sets `caller_employee_id` (no login flow) -- all four MCP tools are
+  correctly unreachable for a real user until real auth exists; decide whether that's
+  acceptable to ship as-is or needs a stub identity source sooner. No live fixture exercises an
+  authorized `get_payroll_run` call (payroll-role caller) end to end.
+- Eval suite is down to 29 cases and thinner on the "ambiguous" category after `find_employee`'s
+  retirement; still no case exercising the one self-only scenario that matters most -- a caller
+  asking about a *different*, valid employee ID and getting `forbidden` from the live agent
+  (only `mcp_server` tests cover that today).
+- Global idempotency store is unscoped by caller (flagged since M2.2) -- two legitimate
+  employees reusing the same key string collide with a spurious conflict.

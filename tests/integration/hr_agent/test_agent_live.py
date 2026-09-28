@@ -33,13 +33,12 @@ async def test_unknown_id_reports_error_without_retrying(ask: Ask) -> None:
     assert "E9999" in turn.text
 
 
-async def test_unique_name_resolves_then_looks_up_balance(ask: Ask) -> None:
+async def test_name_instead_of_id_asks_instead_of_calling_tool(ask: Ask) -> None:
+    # Module 6 retired name-based lookup (find_employee): every employee-scoped tool is
+    # self-service only, so there's no way to search by name -- the agent must ask for an ID.
     turn = await ask("PTO for Bob Smith")
-    assert turn.tool_calls == [
-        ("find_employee", {"name": "Bob Smith"}),
-        ("get_pto_balance", {"employee_id": "E1002"}),
-    ]
-    assert "64.5" in turn.text
+    assert turn.tool_calls == []
+    assert "id" in turn.text.lower()
 
 
 async def test_two_questions_in_one_message(ask: Ask) -> None:

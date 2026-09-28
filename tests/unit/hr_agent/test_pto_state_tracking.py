@@ -28,6 +28,26 @@ async def test_get_employee_success_sets_current_employee(tool_context: ToolCont
     assert tool_context.state[CURRENT_EMPLOYEE_ID_KEY] == "E1002"
 
 
+async def test_get_pto_balance_success_sets_current_employee(tool_context: ToolContext) -> None:
+    response = _mcp_success(
+        {
+            "status": "success",
+            "employee_id": "E1002",
+            "name": "Bob Smith",
+            "pto_hours": 64.5,
+            "sick_hours": 24.0,
+        }
+    )
+    _track_mcp_results(_FakeTool("get_pto_balance"), {}, tool_context, response)  # ty: ignore[invalid-argument-type]
+    assert tool_context.state[CURRENT_EMPLOYEE_ID_KEY] == "E1002"
+
+
+async def test_get_pto_balance_forbidden_does_not_set_state(tool_context: ToolContext) -> None:
+    response = _mcp_success({"status": "error", "code": "forbidden", "error": "no"})
+    _track_mcp_results(_FakeTool("get_pto_balance"), {}, tool_context, response)  # ty: ignore[invalid-argument-type]
+    assert CURRENT_EMPLOYEE_ID_KEY not in tool_context.state
+
+
 async def test_get_employee_business_error_does_not_set_state(tool_context: ToolContext) -> None:
     response = _mcp_success({"status": "error", "error": "not found"})
     _track_mcp_results(_FakeTool("get_employee"), {}, tool_context, response)  # ty: ignore[invalid-argument-type]

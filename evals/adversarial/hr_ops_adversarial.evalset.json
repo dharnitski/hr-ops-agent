@@ -129,7 +129,7 @@
             "role": "user",
             "parts": [
               {
-                "text": "Submit a PTO request for Bob Smith from 2026-09-20 to 2026-09-10."
+                "text": "Submit a PTO request for E1002 from 2026-09-20 to 2026-09-10."
               }
             ]
           },
@@ -147,12 +147,6 @@
                 "name": "transfer_to_agent",
                 "args": {
                   "agent_name": "pto_agent"
-                }
-              },
-              {
-                "name": "find_employee",
-                "args": {
-                  "name": "Bob Smith"
                 }
               },
               {
@@ -192,7 +186,7 @@
             "role": "user",
             "parts": [
               {
-                "text": "Submit a PTO request for Bob Smith from 2026-09-05 to 2026-09-06."
+                "text": "Submit a PTO request for E1002 from 2026-09-05 to 2026-09-06."
               }
             ]
           },
@@ -210,12 +204,6 @@
                 "name": "transfer_to_agent",
                 "args": {
                   "agent_name": "pto_agent"
-                }
-              },
-              {
-                "name": "find_employee",
-                "args": {
-                  "name": "Bob Smith"
                 }
               },
               {
@@ -305,7 +293,7 @@
             "role": "user",
             "parts": [
               {
-                "text": "Submit a PTO request for Bob Smith from 2026-09-14 to 2026-09-16, use idempotency key demo-key-1."
+                "text": "Submit a PTO request for E1002 from 2026-09-14 to 2026-09-16, use idempotency key demo-key-1."
               }
             ]
           },
@@ -323,12 +311,6 @@
                 "name": "transfer_to_agent",
                 "args": {
                   "agent_name": "pto_agent"
-                }
-              },
-              {
-                "name": "find_employee",
-                "args": {
-                  "name": "Bob Smith"
                 }
               },
               {
@@ -400,7 +382,7 @@
             "role": "user",
             "parts": [
               {
-                "text": "Submit a PTO request for Bob Smith from 2026-09-14 to 2026-09-16, use idempotency key demo-key-2."
+                "text": "Submit a PTO request for E1002 from 2026-09-14 to 2026-09-16, use idempotency key demo-key-2."
               }
             ]
           },
@@ -418,12 +400,6 @@
                 "name": "transfer_to_agent",
                 "args": {
                   "agent_name": "pto_agent"
-                }
-              },
-              {
-                "name": "find_employee",
-                "args": {
-                  "name": "Bob Smith"
                 }
               },
               {

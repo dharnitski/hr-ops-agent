@@ -5,7 +5,7 @@ from hr_agent.agents.payroll import payroll_agent
 from hr_agent.agents.policy import policy_agent
 from hr_agent.agents.pto import pto_agent
 from hr_agent.handbook import search_handbook
-from hr_agent.tools import find_employee, get_pto_balance, list_holidays
+from hr_agent.tools import list_holidays
 from hr_agent.toolsets import hcm_toolset, payroll_toolset
 
 
@@ -26,8 +26,6 @@ def test_pto_agent_tools() -> None:
     assert pto_agent.name == "pto_agent"
     assert pto_agent.description
     assert set(pto_agent.tools) == {
-        find_employee,
-        get_pto_balance,
         list_holidays,
         hcm_toolset,
         load_memory,
@@ -63,7 +61,7 @@ def test_pto_instruction_treats_memory_as_reference_not_identity() -> None:
 
 
 def test_hcm_toolset_exposes_only_pto_tools() -> None:
-    assert hcm_toolset.tool_filter == ["get_employee", "submit_pto_request"]
+    assert hcm_toolset.tool_filter == ["get_employee", "get_pto_balance", "submit_pto_request"]
 
 
 def test_payroll_agent_is_read_only_and_isolated() -> None:

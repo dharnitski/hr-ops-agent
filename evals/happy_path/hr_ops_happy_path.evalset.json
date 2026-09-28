@@ -34,7 +34,14 @@
             ]
           }
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1002"
+        }
+      }
     },
     {
       "eval_id": "happy_pto_balance_by_name_single_match",
@@ -52,25 +59,12 @@
             "role": "model",
             "parts": [
               {
-                "text": "Carla Gomez (E1003) has 0.0 hours of PTO remaining."
+                "text": "I can't look employees up by name -- could you give me Carla Gomez's employee ID (e.g. E1002) instead?"
               }
             ]
           },
           "intermediate_data": {
-            "tool_uses": [
-              {
-                "name": "find_employee",
-                "args": {
-                  "name": "Carla Gomez"
-                }
-              },
-              {
-                "name": "get_pto_balance",
-                "args": {
-                  "employee_id": "E1003"
-                }
-              }
-            ]
+            "tool_uses": []
           }
         }
       ]
@@ -91,25 +85,12 @@
             "role": "model",
             "parts": [
               {
-                "text": "Dev Patel (E1004) has 40.0 hours of sick leave and 120.0 hours of PTO remaining."
+                "text": "I can't look employees up by name -- could you give me Dev Patel's employee ID (e.g. E1002) instead?"
               }
             ]
           },
           "intermediate_data": {
-            "tool_uses": [
-              {
-                "name": "find_employee",
-                "args": {
-                  "name": "Dev Patel"
-                }
-              },
-              {
-                "name": "get_pto_balance",
-                "args": {
-                  "employee_id": "E1004"
-                }
-              }
-            ]
+            "tool_uses": []
           }
         }
       ]
@@ -269,27 +250,12 @@
             "role": "model",
             "parts": [
               {
-                "text": "Submitted a PTO request for Bob Smith (E1002) from 2026-09-14 to 2026-09-16 (24.0 hours). It is now pending approval."
+                "text": "I can't look employees up by name -- could you give me Bob Smith's employee ID (e.g. E1002) so I can submit this request?"
               }
             ]
           },
           "intermediate_data": {
-            "tool_uses": [
-              {
-                "name": "find_employee",
-                "args": {
-                  "name": "Bob Smith"
-                }
-              },
-              {
-                "name": "submit_pto_request",
-                "args": {
-                  "employee_id": "E1002",
-                  "start_date": "2026-09-14",
-                  "end_date": "2026-09-16"
-                }
-              }
-            ]
+            "tool_uses": []
           }
         }
       ],
