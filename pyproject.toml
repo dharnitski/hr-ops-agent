@@ -42,6 +42,8 @@ ignore = ["TRY003", "PLR0913"]
 "tests/**" = ["S101", "PLR2004"]
 # Scratch scripts print by design.
 "scratch/**" = ["T201"]
+# CI script's whole job is to write its own log output.
+"scripts/**" = ["T201"]
 # adk eval's loader re-execs hr_agent/__init__.py under a synthetic top-level module name
 # (see docs/PROGRESS.md M5.1); an absolute `from hr_agent...` import inside the package would
 # resolve against the real installed "hr_agent" name instead, double-loading the module tree

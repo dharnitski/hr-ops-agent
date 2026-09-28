@@ -26,15 +26,32 @@ jobs:
 
   eval:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.2.0
       - run: uv sync
-      # No eval sets or agent until Module 1 step 4 / Module 5; enforce once evalsets exist.
+      # Live model + MCP calls need GCP auth. Configure by setting the GOOGLE_CLOUD_PROJECT
+      # repo variable and GCP_WIF_PROVIDER / GCP_WIF_SERVICE_ACCOUNT repo secrets (Workload
+      # Identity Federation, no long-lived key) -- until then this job skips (docs/PROGRESS.md M5.5).
+      - name: Authenticate to GCP
+        if: vars.GOOGLE_CLOUD_PROJECT != ''
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_WIF_SERVICE_ACCOUNT }}
       - name: Run eval gate
+        if: vars.GOOGLE_CLOUD_PROJECT != ''
+        env:
+          GOOGLE_CLOUD_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+          GOOGLE_CLOUD_LOCATION: ${{ vars.GOOGLE_CLOUD_LOCATION || 'global' }}
+          GOOGLE_GENAI_USE_ENTERPRISE: "true"
+          MODEL_ID: ${{ vars.MODEL_ID || 'gemini-3.5-flash-lite' }}
+        run: uv run python scripts/run_eval_gate.py
+      - name: Eval gate not configured
+        if: vars.GOOGLE_CLOUD_PROJECT == ''
         run: |
-          if ls evals/*.evalset.json >/dev/null 2>&1; then
-            uv run adk eval hr_agent evals/*.evalset.json
-          else
-            echo "No eval sets yet; skipping."
-          fi
+          echo "GOOGLE_CLOUD_PROJECT repo variable not set; skipping the live eval gate."
+          echo "See docs/PROGRESS.md M5.5 for the GCP auth this needs before it can run."
