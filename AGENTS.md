@@ -30,8 +30,9 @@ An HR operations agent built on Google ADK. HCM tools are exposed via an MCP ser
 - New HCM tools need: handler in `mcp_server/`, unit test in `tests/unit/`, an integration
   test in `tests/integration/` if it crosses the MCP boundary, and an eval case in `evals/`
   if behavior changes.
-- CI runs lint, unit tests (`tests/unit/`), and the eval gate on every PR. Integration tests
-  run on demand (`uv run pytest tests/integration`), not in CI.
+- CI runs lint and unit tests (`tests/unit/`) on every PR. The eval gate runs on demand only
+  (manual `workflow_dispatch` from the Actions tab) since it makes live, billed model calls.
+  Integration tests run on demand (`uv run pytest tests/integration`), not in CI.
 - Stay AI-vendor-agnostic: never name a specific AI vendor/tool/model in code, docs,
   commits, or PRs — no attribution/co-author/"Generated with" lines for AI tools.
 - Be concise: docs, comments, and messages carry only what changes a decision or

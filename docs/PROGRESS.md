@@ -614,6 +614,10 @@ unchecked step.
   every push/PR is a cost-and-IAM decision for the project owner, not something to enable
   silently while implementing the mechanics. Creating the WIF provider/service account and
   setting the repo variable/secrets is a follow-up step for whoever owns the GCP project.
+  Follow-up: even once GCP auth is configured, the `eval` job only runs on manual
+  `workflow_dispatch` (Actions tab "Run workflow"), not on every push/PR -- each run is live,
+  billed Vertex AI calls, and gating it to on-demand avoids paying for it on every commit.
+  `lint`/`test` are unaffected and keep running automatically on push/PR.
 
 - M5.6 eval standard doc: `docs/05-eval-standard.md` distills M5.1–M5.5 into a standard for
   adding cases and reading gate results, not a retelling of the decision log. Structured

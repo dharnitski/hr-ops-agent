@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   lint:
@@ -25,6 +26,7 @@ jobs:
       - run: uv run pytest tests/unit
 
   eval:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -36,6 +38,8 @@ jobs:
       # Live model + MCP calls need GCP auth. Configure by setting the GOOGLE_CLOUD_PROJECT
       # repo variable and GCP_WIF_PROVIDER / GCP_WIF_SERVICE_ACCOUNT repo secrets (Workload
       # Identity Federation, no long-lived key) -- until then this job skips (docs/PROGRESS.md M5.5).
+      # Manual trigger only (workflow_dispatch): live model calls cost money, so this doesn't
+      # run on every push/PR -- run it on demand from the Actions tab.
       - name: Authenticate to GCP
         if: vars.GOOGLE_CLOUD_PROJECT != ''
         uses: google-github-actions/auth@v3
