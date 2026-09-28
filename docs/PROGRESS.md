@@ -43,7 +43,7 @@ unchecked step.
 - [x] 1. 30–50 case eval set (happy path, ambiguous, adversarial: prompt injection, salary requests)
 - [x] 2. Trajectory + response evals via `adk eval`
 - [x] 3. LLM-as-judge rubric
-- [ ] 4. Launch bar (task success, zero unauthorized access, p95 latency, cost/task)
+- [x] 4. Launch bar (task success, zero unauthorized access, p95 latency, cost/task)
 - [ ] 5. Wired into CI as a gate
 - [ ] 6. `docs/05-eval-standard.md`
 
@@ -564,6 +564,33 @@ unchecked step.
   same-invocation assertion that turn 0 actually succeeded before treating turn 1 as meaningful
   (candidate noted above) would make the case fail loudly and correctly instead of silently testing
   the wrong thing, but doesn't remove the restart requirement itself.
+
+- M5.4 launch bar: four dimensions, each with a threshold, today's actual signal (or explicit
+  gap), and what "gate" means for it right now vs. once later modules land.
+  - **Task success**: bar is binary, not a sampled rate -- all 31 eval cases pass their tier's
+    criteria (`tool_trajectory_avg_score` + `response_match_score`/rubric, thresholds set in
+    M5.1/M5.3). It's a fixed regression suite, not a sampled population, so "success rate"
+    doesn't apply the way it would for live traffic. Gate: any red case blocks merge once M5.5
+    wires this into CI.
+  - **Zero unauthorized access**: no signal exists today, by design gap not oversight -- no case
+    in any tier exercises caller-identity/authorization (flagged since M1.8/M2.4, and explicitly
+    in M5.1's "no caller-identity/authorization cases" note) because the tool/MCP layer enforces
+    none server-side yet (Module 6). The bar itself is zero-tolerance, but it can't be mechanically
+    gated in CI until Module 6 ships permission boundaries plus an eval category for them --
+    until then this is a hard blocker on calling the agent launch-ready, distinct from and stricter
+    than what M5.5's CI gate can actually enforce today.
+  - **p95 latency**: no instrumentation exists yet (Module 8's OpenTelemetry work). Starting floor,
+    unmeasured -- same pattern as M4.3's `num_invocations_to_keep=6` and M5.1's
+    `response_match_score` thresholds: p95 < 5s for a read-only turn (one specialist, 1-2 tool
+    calls), p95 < 10s for a write turn (transfer + validation + submit). Gate: alert-only, not a
+    CI gate, until Module 8 ships tracing to measure it.
+  - **Cost/task**: no cost tracking exists yet either. Starting floor, unmeasured: <$0.01/task on
+    `gemini-3.5-flash-lite` for a typical read, <$0.02 for a write. Same caveat as latency --
+    revisit both once Module 8's dashboard gives real numbers instead of guesses.
+  - Net: this step defines the bar for all four; M5.5 can only mechanically enforce task success
+    today, the other three stay documented targets until Module 6/8 exist. Wiring only the
+    enforceable one into CI without flagging the rest as still-open (not silently met) would
+    misrepresent what "launch ready" means -- worth calling out explicitly in M5.6's doc.
 
 ## Open questions
 
