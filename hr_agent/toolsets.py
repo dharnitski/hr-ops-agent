@@ -34,8 +34,10 @@ hcm_toolset = McpToolset(
 )
 
 # Read-only. tool_filter is a soft, in-process boundary; the hard one is server-side
-# authorization (Module 6).
+# authorization -- a role check (Payroll Specialist/Finance Director) in mcp_server/handlers.py,
+# using the same caller-identity header as hcm_toolset.
 payroll_toolset = McpToolset(
     connection_params=_hcm_connection,
     tool_filter=["get_payroll_run"],
+    header_provider=_caller_headers,
 )

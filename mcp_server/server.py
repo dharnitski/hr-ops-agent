@@ -9,8 +9,9 @@ from mcp_server.handlers import (
     ErrorResult,
     IdempotencyKey,
     IsoDate,
+    PayrollRunResult,
     PtoRequestResult,
-    get_payroll_run,
+    RunId,
 )
 
 # Carries the caller's own employee ID, set by the ADK-side header_provider
@@ -50,6 +51,24 @@ async def get_employee(employee_id: EmployeeId, ctx: Context) -> EmployeeResult 
         On failure: {"status": "error", "code", "error"}; code is one of not_found, forbidden.
     """
     return handlers.get_employee(employee_id, caller_employee_id=_caller_employee_id(ctx))
+
+
+async def get_payroll_run(run_id: RunId, ctx: Context) -> PayrollRunResult | ErrorResult:
+    """Look up a payroll run's summary by run ID. Read-only; aggregates only.
+
+    Restricted to callers whose title is Payroll Specialist or Finance Director. Does not
+    return per-employee pay. Use for questions about run status and timing.
+
+    Args:
+        run_id: Payroll run ID such as "PR-2026-09".
+
+    Returns:
+        On success: {"status": "success", "run_id", "period_start", "period_end",
+        "pay_date", "run_status" ("draft" | "approved" | "paid"), "employee_count",
+        "total_gross"}.
+        On failure: {"status": "error", "code", "error"}; code is one of not_found, forbidden.
+    """
+    return handlers.get_payroll_run(run_id, caller_employee_id=_caller_employee_id(ctx))
 
 
 async def submit_pto_request(

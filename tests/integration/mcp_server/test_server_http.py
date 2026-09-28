@@ -72,6 +72,20 @@ async def test_get_employee_forbidden_with_no_caller_header_over_http() -> None:
     assert result.structured_content["result"]["code"] == "forbidden"
 
 
+async def test_get_payroll_run_succeeds_for_payroll_role_over_http() -> None:
+    is_error, result = await _call(
+        "get_payroll_run", {"run_id": "PR-2026-09"}, caller_employee_id="E1003"
+    )
+    assert not is_error
+    assert result["result"]["status"] == "success"
+
+
+async def test_get_payroll_run_forbidden_for_non_payroll_role_over_http() -> None:
+    is_error, result = await _call("get_payroll_run", {"run_id": "PR-2026-09"})  # E1002 default
+    assert not is_error
+    assert result["result"]["code"] == "forbidden"
+
+
 async def test_retry_with_same_key_replays_over_http() -> None:
     args = _pto_args()
     _, first = await _call("submit_pto_request", args)

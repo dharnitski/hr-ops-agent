@@ -75,15 +75,16 @@ def test_get_employee_caller_id_normalized_case_and_whitespace() -> None:
     assert result["status"] == "success"
 
 
-def test_get_payroll_run_success() -> None:
-    result = get_payroll_run(" pr-2026-09 ")
+@pytest.mark.parametrize("reader_id", ["E1003", "E1004"])
+def test_get_payroll_run_success(reader_id: str) -> None:
+    result = get_payroll_run(" pr-2026-09 ", caller_employee_id=reader_id)
     assert result["status"] == "success"
     assert result["run_id"] == "PR-2026-09"
     assert result["run_status"] == "draft"
 
 
 def test_get_payroll_run_omits_per_employee_pay() -> None:
-    result = get_payroll_run("PR-2026-09")
+    result = get_payroll_run("PR-2026-09", caller_employee_id="E1003")
     assert set(result) == {
         "status",
         "run_id",
@@ -97,10 +98,30 @@ def test_get_payroll_run_omits_per_employee_pay() -> None:
 
 
 def test_get_payroll_run_not_found() -> None:
-    result = get_payroll_run("PR-1999-01")
+    result = get_payroll_run("PR-1999-01", caller_employee_id="E1003")
     assert result["status"] == "error"
     assert result["code"] == "not_found"
     assert "PR-2026-09" in result["error"]
+
+
+def test_get_payroll_run_forbidden_for_non_payroll_role() -> None:
+    # E1002 is a Software Engineer, not Payroll Specialist/Finance Director.
+    result = get_payroll_run("PR-2026-09", caller_employee_id="E1002")
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_get_payroll_run_forbidden_when_no_caller_identity() -> None:
+    result = get_payroll_run("PR-2026-09", caller_employee_id=None)
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_get_payroll_run_forbidden_does_not_confirm_run_exists() -> None:
+    # An unauthorized caller shouldn't learn whether a run ID even exists.
+    result = get_payroll_run("PR-1999-01", caller_employee_id="E1002")
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
 
 
 def test_submit_pto_success_skips_weekend() -> None:

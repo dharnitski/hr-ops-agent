@@ -127,6 +127,18 @@ def test_get_employee_forbidden_over_dispatch() -> None:
     assert result["code"] == "forbidden"
 
 
+def test_get_payroll_run_success_for_payroll_role_over_dispatch() -> None:
+    result = call("get_payroll_run", {"run_id": "PR-2026-09"}, caller_employee_id="E1003")
+    assert result["status"] == "success"
+    assert result["run_id"] == "PR-2026-09"
+
+
+def test_get_payroll_run_forbidden_for_non_payroll_role_over_dispatch() -> None:
+    result = call("get_payroll_run", {"run_id": "PR-2026-09"})  # default caller: E1002
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
 def test_get_employee_forbidden_with_no_context_at_all() -> None:
     # No context= passed: the real shape of a call with no transport-carried identity.
     result = asyncio.run(mcp.call_tool("get_employee", {"employee_id": "E1002"}))

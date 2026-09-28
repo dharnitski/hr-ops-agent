@@ -48,7 +48,7 @@ unchecked step.
 - [x] 6. `docs/05-eval-standard.md`
 
 ## Module 6 — Safety and governance
-- [ ] 1. Permission boundaries in tool/MCP layer (act as requesting user)
+- [x] 1. Permission boundaries in tool/MCP layer (act as requesting user)
 - [ ] 2. Human-in-the-loop callbacks (PTO confirm, payroll manager approval)
 - [ ] 3. Audit log of every tool call
 - [ ] 4. Rate / blast-radius limits
@@ -626,9 +626,8 @@ unchecked step.
   checklist covering the placeholder-golden-response and one-time-use-idempotency-key traps
   already hit once each in M5.1/M5.3.
 
-- M6.1 (partial: get_employee, submit_pto_request self-only; get_payroll_run still open):
-  closes the caller-identity gap tracked since M1.8/M2.4/M5.1 for the two employee-scoped
-  tools. Identity flows from the transport, never a tool argument, confirmed from installed
+- M6.1: closes the caller-identity gap tracked since M1.8/M2.4/M5.1 for all three MCP tools.
+  Identity flows from the transport, never a tool argument, confirmed from installed
   `google-adk` 2.9.2 / `mcp` source: `McpToolset(header_provider=...)` (a
   `Callable[[ReadonlyContext], dict[str, str]]`) turns a new session-state key,
   `caller_employee_id` (hr_agent/toolsets.py), into an `x-caller-employee-id` header per MCP
@@ -651,20 +650,54 @@ unchecked step.
   `submit_pto_request` hit ruff's max-return-statements limit adding the check; extracted
   `_check_caller_and_key` (identity + key-format, both pre-store guards) into its own helper
   rather than suppressing the lint.
-  Left open, not fixed: `get_payroll_run` still has no caller scoping (different risk profile
-  -- aggregate-only, no per-employee pay -- so left as a decision to make explicitly, not an
-  oversight). The idempotency store is still one global dict keyed only by `idempotency_key`
-  (M2.2), unscoped by caller -- two different, both-legitimate employees choosing the same key
-  string still collide with a spurious `idempotency_conflict`; the self-only check blocks
-  cross-employee access to a key, not same-key collisions between unrelated authorized
-  callers. `evals/happy_path/hr_ops_happy_path.evalset.json` has a `get_employee` case that
-  will fail once CI's eval gate runs live (M5.5, still blocked on GCP creds): `adk eval`
-  builds its own session with no `caller_employee_id` state, so that case now hits
-  `forbidden`. Whether `EvalCase`/`Invocation` supports seeding initial session state is
-  unresearched -- tracked, not fixed. `tests/integration/hr_agent/test_agent_live.py`,
+
+  `get_payroll_run` (closing the item left open above): chose a role check over leaving it
+  unscoped -- aggregate-only data is lower risk than per-employee PTO/salary, but "any caller
+  can read any run" still failed M5.4's zero-tolerance unauthorized-access bar. `title` in
+  `EMPLOYEES` already distinguishes "Payroll Specialist"/"Finance Director" from every other
+  role, so no new role field was needed: `PAYROLL_READER_TITLES` (mcp_server/handlers.py) is
+  checked by looking up the caller's own record via `caller_employee_id`, same transport-only
+  identity as the other two tools. Unlike self-only, this is a role gate, not an identity
+  match -- any caller holding one of those titles may read any run, since there's no
+  per-employee scoping question for aggregate data. `hr_agent/toolsets.py`'s `payroll_toolset`
+  had no `header_provider` at all before this (caller identity never reached it), so it was
+  silently unscoped even after M6.1's first pass; added the same `_caller_headers` used by
+  `hcm_toolset`. `payroll_agent`'s instruction needed no change -- its existing generic
+  "tool returns status error, tell the user plainly" rule already covers `forbidden` the same
+  way `pto_agent`'s does. Unit (`tests/unit/mcp_server/test_handlers.py`,
+  `test_server.py`) and live-HTTP integration (`tests/integration/mcp_server/test_server_http.py`,
+  ran clean, no GCP needed) tests cover success for both titles, forbidden for a non-payroll
+  role, forbidden with no caller identity, and that forbidden doesn't leak whether the run ID
+  exists.
+
+  Eval-case fix (the `get_employee` case flagged as broken above): confirmed from installed
+  `google-adk` 2.9.2 source that `EvalCase.session_input` (a `SessionInput` with `app_name`,
+  `user_id`, `state`) does exist and is exactly what `adk eval` uses to seed the session's
+  initial state before running a case -- `local_eval_service.py` passes `initial_session.state`
+  straight to `session_service.create_session`, and defaults to `"test_user_id"`/no state only
+  when `session_input` is absent. Added `session_input.state.caller_employee_id` to every
+  happy_path/adversarial case that calls `get_employee`, `submit_pto_request`, or
+  `get_payroll_run` and would otherwise hit the now-universal `forbidden` check: the caller
+  matches the target employee for the two self-only tools, and a payroll-role employee
+  (E1003) for the two payroll cases. `adversarial_submit_pto_malformed_employee_id` (target
+  `"E99"`) deliberately left unset -- it fails at the schema layer (`EmployeeId` pattern)
+  before the handler's caller check ever runs, so identity is irrelevant there. Validated by
+  parsing both files back through `EvalSet.model_validate` (structural only, no live run --
+  same GCP-credential gap as everything else below).
+
+  Left open, not fixed: the idempotency store is still one global dict keyed only by
+  `idempotency_key` (M2.2), unscoped by caller -- two different, both-legitimate employees
+  choosing the same key string still collide with a spurious `idempotency_conflict`; the
+  self-only check blocks cross-employee access to a key, not same-key collisions between
+  unrelated authorized callers. `tests/integration/hr_agent/test_agent_live.py`,
   `test_agent_mcp_live.py`, `test_memory_live.py` were updated (conftest sessions now carry
-  `caller_employee_id="E1002"`) but not run -- this environment has no
-  `GOOGLE_CLOUD_PROJECT`/live model access to verify them against.
+  `caller_employee_id="E1002"`) but not run, and `tests/integration/hr_agent/conftest.py`'s
+  `ask`/`conversation`/`sessions` fixtures still default every session to E1002 (Software
+  Engineer) -- `test_router_live.py::test_payroll_question_routes_to_payroll_agent` only
+  asserts that `get_payroll_run` gets called, not that it succeeds, so it stays valid as a
+  routing test but no live fixture yet exercises a payroll call that's actually authorized to
+  succeed. This environment has no `GOOGLE_CLOUD_PROJECT`/live model access to verify any of
+  this against a real model.
 
 ## Open questions
 
@@ -701,11 +734,10 @@ unchecked step.
   synthetic memory fact is free-text, not structured; `InMemoryMemoryService`'s keyword search
   found it fine in testing, but recall quality should be re-verified against the real
   `VertexAiMemoryBankService`'s semantic search once Module 7's resource exists.
-- M6.1: `get_payroll_run` has no caller scoping -- decide whether it needs one (e.g. a role
-  check limited to Payroll Specialist/Finance Director) before the step is done, or stays
-  open on the grounds it's aggregate-only. No production code sets `caller_employee_id`
-  (no login flow) -- get_employee/submit_pto_request are correctly unreachable for a real
-  user until Module 7 or later adds real auth; worth deciding whether that's acceptable to
-  ship as-is or needs a stub identity source sooner. `evals/happy_path/hr_ops_happy_path
-  .evalset.json`'s get_employee case will fail once the CI eval gate runs live -- investigate
-  `EvalCase`/`Invocation` state-seeding, or accept and document the known-broken case.
+- M6.1: no production code sets `caller_employee_id` (no login flow) -- all three MCP tools
+  are correctly unreachable for a real user until Module 7 or later adds real auth; worth
+  deciding whether that's acceptable to ship as-is or needs a stub identity source sooner.
+  No live fixture (`tests/integration/hr_agent/conftest.py`) yet sets a payroll-role caller,
+  so no live-agent test exercises an authorized `get_payroll_run` call end to end (see M6.1
+  decision above) -- candidate: a `payroll_ask` fixture or a role parameter on `ask`.
+  The global, caller-unscoped idempotency store (flagged since M2.2) is still open.

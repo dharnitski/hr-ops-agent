@@ -105,11 +105,10 @@ def get_employee(
         On success: {"status": "success", "employee_id", "name", "title"}.
         On failure: {"status": "error", "code", "error"}; code is one of not_found, forbidden.
     """
-    normalized_id = employee_id.strip().upper()
-    normalized_caller = (caller_employee_id or "").strip().upper()
+    normalized_id, employee = _lookup(employee_id)
+    normalized_caller = _normalize_id(caller_employee_id or "")
     if not normalized_caller or normalized_caller != normalized_id:
         return _forbidden(normalized_id)
-    _, employee = _lookup(employee_id)
     if employee is None:
         return _not_found(employee_id)
     return {
@@ -131,8 +130,15 @@ def _error(code: ErrorCode, message: str) -> ErrorResult:
     return {"status": "error", "code": code, "error": message}
 
 
+def _normalize_id(value: str) -> str:
+    """The ID normalization every handler applies before comparing or looking up: strip
+    whitespace, uppercase. Shared so employee/run IDs and caller identity are always
+    compared on the same terms (e.g. "e1002" vs "E1002" don't spuriously mismatch)."""
+    return value.strip().upper()
+
+
 def _lookup(employee_id: str) -> tuple[str, dict[str, Any] | None]:
-    normalized_id = employee_id.strip().upper()
+    normalized_id = _normalize_id(employee_id)
     return normalized_id, EMPLOYEES.get(normalized_id)
 
 
@@ -150,21 +156,40 @@ def _forbidden(employee_id: str) -> ErrorResult:
     )
 
 
-def get_payroll_run(run_id: RunId) -> PayrollRunResult | ErrorResult:
+# Titles authorized to read payroll run summaries. Role, not identity: unlike
+# get_employee/submit_pto_request (self-only), any caller holding one of these titles may
+# read any run -- there's no per-employee data to scope here, only who does payroll for a
+# living. Sourced from EMPLOYEES["title"] since no separate role field exists yet.
+PAYROLL_READER_TITLES = frozenset({"Payroll Specialist", "Finance Director"})
+
+
+def get_payroll_run(
+    run_id: RunId, *, caller_employee_id: str | None
+) -> PayrollRunResult | ErrorResult:
     """Look up a payroll run's summary by run ID. Read-only; aggregates only.
 
-    Does not return per-employee pay. Use for questions about run status and timing.
+    Restricted to callers whose title is Payroll Specialist or Finance Director. Does not
+    return per-employee pay. Use for questions about run status and timing.
 
     Args:
         run_id: Payroll run ID such as "PR-2026-09".
+        caller_employee_id: The requesting session's own employee ID, established by the
+            transport layer -- never a model-supplied argument (Module 6).
 
     Returns:
         On success: {"status": "success", "run_id", "period_start", "period_end",
         "pay_date", "run_status" ("draft" | "approved" | "paid"), "employee_count",
         "total_gross"}.
-        On failure: {"status": "error", "code": "not_found", "error": <reason>}.
+        On failure: {"status": "error", "code", "error"}; code is one of not_found, forbidden.
     """
-    normalized_id = run_id.strip().upper()
+    _, caller = _lookup(caller_employee_id or "")
+    if caller is None or caller["title"] not in PAYROLL_READER_TITLES:
+        return _error(
+            "forbidden",
+            "Not authorized to view payroll run data. Requires the Payroll Specialist or "
+            "Finance Director role.",
+        )
+    normalized_id = _normalize_id(run_id)
     run = PAYROLL_RUNS.get(normalized_id)
     if run is None:
         known = ", ".join(sorted(PAYROLL_RUNS))
@@ -221,9 +246,10 @@ def _check_caller_and_key(
     that function's return-statement count under the linter's limit; the checks themselves are
     unrelated (identity vs. syntactic key validity) and would be separate ifs either way.
     """
-    normalized_caller = (caller_employee_id or "").strip().upper()
-    if not normalized_caller or normalized_caller != employee_id.strip().upper():
-        return _forbidden(employee_id.strip().upper())
+    normalized_caller = _normalize_id(caller_employee_id or "")
+    normalized_id = _normalize_id(employee_id)
+    if not normalized_caller or normalized_caller != normalized_id:
+        return _forbidden(normalized_id)
     key = idempotency_key.strip()
     if not key:
         return _error("invalid_key", "idempotency_key must be a non-empty string.")
