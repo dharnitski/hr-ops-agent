@@ -29,7 +29,7 @@ def _caller_headers(ctx: ReadonlyContext) -> dict[str, str]:
 
 hcm_toolset = McpToolset(
     connection_params=_hcm_connection,
-    tool_filter=["get_employee", "submit_pto_request"],
+    tool_filter=["get_employee", "get_pto_balance", "submit_pto_request"],
     header_provider=_caller_headers,
 )
 

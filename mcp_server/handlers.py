@@ -62,6 +62,14 @@ class EmployeeResult(TypedDict):
     title: str
 
 
+class PtoBalanceResult(TypedDict):
+    status: Literal["success"]
+    employee_id: str
+    name: str
+    pto_hours: float
+    sick_hours: float
+
+
 class PayrollRunResult(TypedDict):
     status: Literal["success"]
     run_id: str
@@ -84,10 +92,6 @@ class PtoRequestResult(TypedDict):
     replayed: bool
 
 
-# The ID normalize/lookup/not-found logic below duplicates hr_agent/tools.py:get_pto_balance
-# on purpose: sharing code across the MCP boundary would couple deploy and versioning. The
-# agent-side copy goes away in M2.3. Once a second handler lands here (M2.2), extract a
-# private _lookup(employee_id) within this module.
 def get_employee(
     employee_id: EmployeeId, *, caller_employee_id: str | None
 ) -> EmployeeResult | ErrorResult:
@@ -116,6 +120,38 @@ def get_employee(
         "employee_id": normalized_id,
         "name": employee["name"],
         "title": employee["title"],
+    }
+
+
+def get_pto_balance(
+    employee_id: EmployeeId, *, caller_employee_id: str | None
+) -> PtoBalanceResult | ErrorResult:
+    """Look up the caller's own remaining PTO and sick-leave balance.
+
+    Self-service only: returns "forbidden" unless employee_id is the caller's own ID.
+
+    Args:
+        employee_id: Employee ID in the form "E" plus four digits, e.g. "E1002".
+        caller_employee_id: The requesting session's own employee ID, established by the
+            transport layer -- never a model-supplied argument (Module 6).
+
+    Returns:
+        On success: {"status": "success", "employee_id", "name", "pto_hours", "sick_hours"},
+        with balances in hours. On failure: {"status": "error", "code", "error"}; code is one
+        of not_found, forbidden.
+    """
+    normalized_id, employee = _lookup(employee_id)
+    normalized_caller = _normalize_id(caller_employee_id or "")
+    if not normalized_caller or normalized_caller != normalized_id:
+        return _forbidden(normalized_id)
+    if employee is None:
+        return _not_found(employee_id)
+    return {
+        "status": "success",
+        "employee_id": normalized_id,
+        "name": employee["name"],
+        "pto_hours": employee["pto_hours"],
+        "sick_hours": employee["sick_hours"],
     }
 
 

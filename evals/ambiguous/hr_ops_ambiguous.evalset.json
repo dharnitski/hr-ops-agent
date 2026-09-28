@@ -4,39 +4,6 @@
   "description": "Requests with a missing or multi-valued detail the agent must resolve by asking, or by reusing session state -- not by guessing or declining. Includes regression cases for the M3/M4.4 router bugs.",
   "eval_cases": [
     {
-      "eval_id": "ambiguous_multiple_name_matches",
-      "conversation": [
-        {
-          "user_content": {
-            "role": "user",
-            "parts": [
-              {
-                "text": "How much PTO does Alice have?"
-              }
-            ]
-          },
-          "final_response": {
-            "role": "model",
-            "parts": [
-              {
-                "text": "There are two employees named Alice: Alice Johnson (E1001, Engineering Manager) and Alice Nguyen (E1005, Recruiter). Which one did you mean?"
-              }
-            ]
-          },
-          "intermediate_data": {
-            "tool_uses": [
-              {
-                "name": "find_employee",
-                "args": {
-                  "name": "Alice"
-                }
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
       "eval_id": "ambiguous_missing_identity",
       "conversation": [
         {
@@ -70,7 +37,7 @@
             "role": "user",
             "parts": [
               {
-                "text": "Is December 25, 2026 a company holiday, and how much sick time does Bob Smith have?"
+                "text": "Is December 25, 2026 a company holiday, and how much sick time does E1002 have?"
               }
             ]
           },
@@ -91,12 +58,6 @@
                 }
               },
               {
-                "name": "find_employee",
-                "args": {
-                  "name": "Bob Smith"
-                }
-              },
-              {
                 "name": "get_pto_balance",
                 "args": {
                   "employee_id": "E1002"
@@ -105,7 +66,14 @@
             ]
           }
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1002"
+        }
+      }
     },
     {
       "eval_id": "ambiguous_session_identity_reuse",
@@ -115,7 +83,7 @@
             "role": "user",
             "parts": [
               {
-                "text": "What's Bob Smith's PTO balance?"
+                "text": "What's E1002's PTO balance?"
               }
             ]
           },
@@ -129,12 +97,6 @@
           },
           "intermediate_data": {
             "tool_uses": [
-              {
-                "name": "find_employee",
-                "args": {
-                  "name": "Bob Smith"
-                }
-              },
               {
                 "name": "get_pto_balance",
                 "args": {
@@ -165,7 +127,14 @@
             "tool_uses": []
           }
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1002"
+        }
+      }
     },
     {
       "eval_id": "ambiguous_router_recall_missing_detail",
@@ -175,7 +144,7 @@
             "role": "user",
             "parts": [
               {
-                "text": "Tell me about Alice Nguyen."
+                "text": "Tell me about E1005."
               }
             ]
           },
@@ -190,9 +159,9 @@
           "intermediate_data": {
             "tool_uses": [
               {
-                "name": "find_employee",
+                "name": "get_employee",
                 "args": {
-                  "name": "Alice Nguyen"
+                  "employee_id": "E1005"
                 }
               }
             ]
@@ -219,7 +188,14 @@
             "tool_uses": []
           }
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1005"
+        }
+      }
     },
     {
       "eval_id": "ambiguous_vague_time_off_request",
@@ -269,39 +245,6 @@
           },
           "intermediate_data": {
             "tool_uses": []
-          }
-        }
-      ]
-    },
-    {
-      "eval_id": "ambiguous_employee_not_found",
-      "conversation": [
-        {
-          "user_content": {
-            "role": "user",
-            "parts": [
-              {
-                "text": "What's the PTO balance for Zoe Baker?"
-              }
-            ]
-          },
-          "final_response": {
-            "role": "model",
-            "parts": [
-              {
-                "text": "I couldn't find an employee matching 'Zoe Baker'. Could you double check the name or give me their employee ID?"
-              }
-            ]
-          },
-          "intermediate_data": {
-            "tool_uses": [
-              {
-                "name": "find_employee",
-                "args": {
-                  "name": "Zoe Baker"
-                }
-              }
-            ]
           }
         }
       ]

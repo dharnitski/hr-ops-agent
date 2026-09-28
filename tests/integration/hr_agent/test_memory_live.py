@@ -2,8 +2,8 @@
 
 Unlike session state (test_session_state_live.py), this survives a fresh session for the same
 user. A recalled employee ID may be used for a read (get_pto_balance validates it on its own)
-but never for submit_pto_request without a fresh find_employee/get_employee this session --
-see the pto_agent instruction and docs/PROGRESS.md M4.2.
+but never for submit_pto_request without a fresh get_employee this session -- see the
+pto_agent instruction and docs/PROGRESS.md M4.2.
 """
 
 from collections.abc import Awaitable, Callable
@@ -34,4 +34,3 @@ async def test_second_session_recalls_employee_for_a_balance_lookup(
     # right employee's balance came back, without asking the user to repeat the ID.
     assert "load_memory" in [name for name, _ in second.tool_calls]
     assert ("get_pto_balance", {"employee_id": "E1002"}) in second.tool_calls
-    assert not [name for name, _ in second.tool_calls if name == "find_employee"]

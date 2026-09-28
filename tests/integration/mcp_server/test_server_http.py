@@ -39,7 +39,12 @@ async def _call(
 async def test_lists_exactly_the_hcm_tools_with_output_schemas() -> None:
     async with Client(URL) as client:
         tools = (await client.list_tools()).tools
-    assert {t.name for t in tools} == {"get_employee", "get_payroll_run", "submit_pto_request"}
+    assert {t.name for t in tools} == {
+        "get_employee",
+        "get_pto_balance",
+        "get_payroll_run",
+        "submit_pto_request",
+    }
     assert all(t.output_schema for t in tools)
 
 
@@ -70,6 +75,21 @@ async def test_get_employee_forbidden_with_no_caller_header_over_http() -> None:
     assert not result.is_error
     assert result.structured_content is not None
     assert result.structured_content["result"]["code"] == "forbidden"
+
+
+async def test_get_pto_balance_forbidden_for_someone_elses_id_over_http() -> None:
+    is_error, result = await _call(
+        "get_pto_balance", {"employee_id": "E1002"}, caller_employee_id="E1001"
+    )
+    assert not is_error
+    assert result["result"]["code"] == "forbidden"
+
+
+async def test_get_pto_balance_succeeds_for_own_id_over_http() -> None:
+    is_error, result = await _call("get_pto_balance", {"employee_id": "E1002"})
+    assert not is_error
+    assert result["result"]["status"] == "success"
+    assert result["result"]["pto_hours"] == 64.5
 
 
 async def test_get_payroll_run_succeeds_for_payroll_role_over_http() -> None:

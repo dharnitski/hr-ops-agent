@@ -703,6 +703,51 @@ unchecked step.
   succeed. This environment has no `GOOGLE_CLOUD_PROJECT`/live model access to verify any of
   this against a real model.
 
+- M6.2: closes the gap M6.1 deliberately left open -- `get_pto_balance` and `find_employee`
+  were still the pre-M2 local tools (`hr_agent/tools.py`), reachable with no caller-identity
+  check at all, get_pto_balance being the one tool that actually returns balances (`get_employee`
+  never did). Found live: asking `adk web` for E1002's balance then E1003's in the same session
+  returned both, no auth, because `get_pto_balance` took `employee_id` as a plain argument and
+  unconditionally overwrote `current_employee_id` -- the exact cross-employee read Module 6 was
+  supposed to close. Tracked since M1.8 ("access-control gap noted... for Module 6") and named
+  again in M2.4's "no MCP equivalent yet", but M6.1's checklist item ("Permission boundaries in
+  tool/MCP layer") was checked off `[x]` without covering it.
+
+  Added `get_pto_balance` to `mcp_server/handlers.py`/`server.py` as a fourth MCP tool, self-only
+  like `get_employee` (same `caller_employee_id` check, same `forbidden` before any lookup).
+  `find_employee` has no such path: self-only means "may only ever see your own record," and a
+  name search is inherently a search across everyone else's names too, so there's no self-only
+  version of it worth building -- retired instead of ported. `hr_agent/tools.py` now holds only
+  `list_holidays` (not employee-scoped, no identity question applies); `pto_agent`'s tools are
+  `[list_holidays, hcm_toolset, load_memory]`, `hcm_toolset.tool_filter` adds `get_pto_balance`.
+  Instruction rewritten: no more "resolve with find_employee" step (ask for the ID instead), plus
+  an explicit rule that "forbidden" means the ID isn't the caller's own, not a retryable error.
+
+  Ripple into `scratch/react_from_scratch.py` (Module 1's framework-free rebuild): it imported
+  `hr_agent.tools.find_employee`/`get_pto_balance` by reference (docstring and all) and the
+  *current* `pto_agent.INSTRUCTION`, coupling a "no framework" demo to production internals that
+  no longer exist in that shape. Gave it its own local `find_employee`/`get_pto_balance` (same
+  logic, against `hr_agent.mock_data` directly) and its own short instruction, rather than
+  re-deriving Module 6's MCP/session-header machinery in a script that intentionally has no ADK
+  session.
+
+  Eval sets: 9 of 31 cases across all three files called `find_employee` or asked about a
+  different named employee with no caller identity set -- i.e., several were unknowingly built
+  around the exact vulnerability this closes. Where `find_employee` was incidental (an
+  otherwise-unrelated date/idempotency/multi-intent case that happened to name-resolve the
+  caller's own ID), swapped the name for the ID directly and dropped the resolution step --
+  `adversarial_submit_pto_*` (4), `ambiguous_compound_multi_intent_router_regression`,
+  `ambiguous_session_identity_reuse`, `ambiguous_router_recall_missing_detail`. Removed
+  `happy_pto_balance_by_id`'s missing `session_input` (would now be `forbidden` with no caller
+  set). Where the case's entire premise was resolving *someone else's* name (no self-only
+  version exists): rewrote `happy_pto_balance_by_name_single_match`, `happy_sick_balance_lookup_by_name`,
+  and `happy_submit_pto_request_by_name` to expect the agent asking for an ID instead of
+  resolving one. Removed `ambiguous_multiple_name_matches` (two-Alices disambiguation) and
+  `ambiguous_employee_not_found` outright -- both were purely about `find_employee`'s
+  matching/not-found behavior, which no longer exists and has no replacement to test; eval count
+  drops from 31 to 29. Validated with `EvalSet.model_validate` only (structural), not run live --
+  same `GOOGLE_CLOUD_PROJECT` gap as everything else here.
+
 ## Open questions
 
 - M2: schema-layer rejections return raw pydantic text with no example ID. A server-side
@@ -738,10 +783,19 @@ unchecked step.
   synthetic memory fact is free-text, not structured; `InMemoryMemoryService`'s keyword search
   found it fine in testing, but recall quality should be re-verified against the real
   `VertexAiMemoryBankService`'s semantic search once Module 7's resource exists.
-- M6.1: no production code sets `caller_employee_id` (no login flow) -- all three MCP tools
-  are correctly unreachable for a real user until Module 7 or later adds real auth; worth
-  deciding whether that's acceptable to ship as-is or needs a stub identity source sooner.
-  No live fixture (`tests/integration/hr_agent/conftest.py`) yet sets a payroll-role caller,
-  so no live-agent test exercises an authorized `get_payroll_run` call end to end (see M6.1
-  decision above) -- candidate: a `payroll_ask` fixture or a role parameter on `ask`.
-  The global, caller-unscoped idempotency store (flagged since M2.2) is still open.
+- M6.1: no production code sets `caller_employee_id` (no login flow) -- all four MCP tools
+  (`get_employee`, `get_pto_balance`, `submit_pto_request`, `get_payroll_run`) are correctly
+  unreachable for a real user until Module 7 or later adds real auth; worth deciding whether
+  that's acceptable to ship as-is or needs a stub identity source sooner. No live fixture
+  (`tests/integration/hr_agent/conftest.py`) yet sets a payroll-role caller, so no live-agent
+  test exercises an authorized `get_payroll_run` call end to end (see M6.1 decision above) --
+  candidate: a `payroll_ask` fixture or a role parameter on `ask`. The global, caller-unscoped
+  idempotency store (flagged since M2.2) is still open.
+- M6.2: eval suite dropped from 31 to 29 cases (two `find_employee`-only ambiguous scenarios
+  removed outright) and three happy-path cases changed from "resolve a name" to "ask for an ID"
+  -- none of this has been run live, so `response_match_score`/rubric behavior on the rewritten
+  cases is unverified, and the suite is a bit thinner on the "ambiguous" category specifically.
+  Candidates before trusting the eval gate again: a live run of all three sets, and a new
+  case or two covering the one self-only scenario nothing here exercises live yet -- a caller
+  asking about a *different*, valid employee ID and getting `forbidden` from the agent, not
+  just from `mcp_server` tests.

@@ -10,6 +10,7 @@ from mcp_server.handlers import (
     IdempotencyKey,
     IsoDate,
     PayrollRunResult,
+    PtoBalanceResult,
     PtoRequestResult,
     RunId,
 )
@@ -51,6 +52,22 @@ async def get_employee(employee_id: EmployeeId, ctx: Context) -> EmployeeResult 
         On failure: {"status": "error", "code", "error"}; code is one of not_found, forbidden.
     """
     return handlers.get_employee(employee_id, caller_employee_id=_caller_employee_id(ctx))
+
+
+async def get_pto_balance(employee_id: EmployeeId, ctx: Context) -> PtoBalanceResult | ErrorResult:
+    """Look up the caller's own remaining PTO and sick-leave balance.
+
+    Self-service only: returns "forbidden" unless employee_id is the caller's own ID.
+
+    Args:
+        employee_id: Employee ID in the form "E" plus four digits, e.g. "E1002".
+
+    Returns:
+        On success: {"status": "success", "employee_id", "name", "pto_hours", "sick_hours"},
+        with balances in hours. On failure: {"status": "error", "code", "error"}; code is one
+        of not_found, forbidden.
+    """
+    return handlers.get_pto_balance(employee_id, caller_employee_id=_caller_employee_id(ctx))
 
 
 async def get_payroll_run(run_id: RunId, ctx: Context) -> PayrollRunResult | ErrorResult:
@@ -131,6 +148,7 @@ def _forbid_extra_arguments(server: MCPServer) -> None:
 
 mcp = MCPServer("hcm")
 mcp.tool()(get_employee)
+mcp.tool()(get_pto_balance)
 mcp.tool()(get_payroll_run)
 mcp.tool()(submit_pto_request)
 _forbid_extra_arguments(mcp)

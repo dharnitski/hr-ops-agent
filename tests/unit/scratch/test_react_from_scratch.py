@@ -51,34 +51,18 @@ def script(monkeypatch: pytest.MonkeyPatch) -> Callable[..., list[list[types.Con
     return _install
 
 
-@pytest.mark.parametrize(
-    ("wrapper", "source"),
-    [
-        (rfs.find_employee, rfs.hr_tools.find_employee),
-        (rfs.get_pto_balance, rfs.hr_tools.get_pto_balance),
-    ],
-)
-def test_wrapper_docstring_copied_from_source(
-    wrapper: Callable[..., Any], source: Callable[..., Any]
-) -> None:
-    """The docstring is the tool contract genai reads; it must not go stale or empty."""
-    assert wrapper.__doc__
-    assert wrapper.__doc__ == source.__doc__
+@pytest.mark.parametrize("fn", [rfs.find_employee, rfs.get_pto_balance])
+def test_tool_has_a_docstring(fn: Callable[..., Any]) -> None:
+    """The docstring is the tool contract genai reads; it must not be empty."""
+    assert fn.__doc__
 
 
-@pytest.mark.parametrize("wrapper", [rfs.find_employee, rfs.get_pto_balance])
-def test_wrapper_signature_excludes_tool_context(wrapper: Callable[..., Any]) -> None:
+@pytest.mark.parametrize("fn", [rfs.find_employee, rfs.get_pto_balance])
+def test_tool_signature_excludes_tool_context(fn: Callable[..., Any]) -> None:
     """genai builds the model-facing schema from this signature; tool_context must not leak
-    into it (it's an ADK-only value the model is never given and could never supply)."""
-    assert "tool_context" not in inspect.signature(wrapper).parameters
-
-
-@pytest.mark.parametrize("wrapper", [rfs.find_employee, rfs.get_pto_balance])
-def test_wrapper_is_not_functools_wraps(wrapper: Callable[..., Any]) -> None:
-    """functools.wraps sets __wrapped__, which inspect.signature() follows by default --
-    that would unwrap straight back to the source function and its tool_context parameter,
-    silently reintroducing the schema leak the previous test guards against."""
-    assert not hasattr(wrapper, "__wrapped__")
+    into it (this loop has no ADK session to supply one, and the model could never provide
+    it either)."""
+    assert "tool_context" not in inspect.signature(fn).parameters
 
 
 def test_execute_tool_success() -> None:

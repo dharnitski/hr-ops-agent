@@ -43,11 +43,16 @@ as the soft layer over the hard ones.
 
 ## Risk the framework doesn't handle: access control
 
-ADK runs the tools; it does not decide who may see whose data. Today any caller can ask
-`get_pto_balance` for any employee ID, and `find_employee` will resolve any name. The
+ADK runs the tools; it does not decide who may see whose data. As of this module, any caller
+can ask `get_pto_balance` for any employee ID, and `find_employee` will resolve any name. The
 "ambiguous means ask, don't pick" rule is prompt-enforced only.
 
 Owner: the MCP server (Module 2) must authorize every call against the caller's identity,
 taken from the transport (token/session), never from a model-supplied argument. Module 6
 adds human-in-the-loop approval and the audit log. Until then this agent is safe only on
 mock data.
+
+Update (M6.2): closed. `get_pto_balance` moved to the MCP layer with the same self-only,
+transport-identity check as `get_employee`; `find_employee`'s name-based lookup had no way to
+stay self-only (it must search across everyone), so it was retired rather than ported.
+`hr_agent/tools.py` now only holds `list_holidays`, which isn't employee-scoped.

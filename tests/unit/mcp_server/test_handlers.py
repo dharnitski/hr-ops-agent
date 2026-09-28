@@ -6,6 +6,7 @@ from mcp_server import handlers
 from mcp_server.handlers import (
     get_employee,
     get_payroll_run,
+    get_pto_balance,
     submit_pto_request,
 )
 
@@ -73,6 +74,57 @@ def test_get_employee_forbidden_does_not_confirm_target_exists() -> None:
 def test_get_employee_caller_id_normalized_case_and_whitespace() -> None:
     result = get_employee("E1002", caller_employee_id="  e1002 ")
     assert result["status"] == "success"
+
+
+def test_get_pto_balance_success() -> None:
+    assert get_pto_balance("E1002", caller_employee_id="E1002") == {
+        "status": "success",
+        "employee_id": "E1002",
+        "name": "Bob Smith",
+        "pto_hours": 64.5,
+        "sick_hours": 24.0,
+    }
+
+
+def test_get_pto_balance_normalizes_id() -> None:
+    result = get_pto_balance("  e1002 ", caller_employee_id="e1002")
+    assert result["status"] == "success"
+    assert result["employee_id"] == "E1002"
+
+
+def test_get_pto_balance_zero_balance_is_success() -> None:
+    result = get_pto_balance("E1003", caller_employee_id="E1003")
+    assert result["status"] == "success"
+    assert result["pto_hours"] == 0.0
+
+
+def test_get_pto_balance_not_found() -> None:
+    result = get_pto_balance("E9999", caller_employee_id="E9999")
+    assert result["status"] == "error"
+    assert result["code"] == "not_found"
+
+
+def test_get_pto_balance_omits_sensitive_fields() -> None:
+    result = get_pto_balance("E1002", caller_employee_id="E1002")
+    assert set(result) == {"status", "employee_id", "name", "pto_hours", "sick_hours"}
+
+
+def test_get_pto_balance_forbidden_for_someone_elses_id() -> None:
+    result = get_pto_balance("E1002", caller_employee_id="E1001")
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_get_pto_balance_forbidden_when_no_caller_identity() -> None:
+    result = get_pto_balance("E1002", caller_employee_id=None)
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_get_pto_balance_forbidden_does_not_confirm_target_exists() -> None:
+    result = get_pto_balance("E9999", caller_employee_id="E1002")
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
 
 
 @pytest.mark.parametrize("reader_id", ["E1003", "E1004"])

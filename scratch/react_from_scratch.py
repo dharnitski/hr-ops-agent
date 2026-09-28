@@ -9,7 +9,6 @@ import functools
 import os
 import time
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 from dotenv import load_dotenv
@@ -17,37 +16,101 @@ from google import genai
 from google.genai import types
 
 from hr_agent import tools as hr_tools
-from hr_agent.agents.pto import INSTRUCTION
 from hr_agent.config import DEFAULT_MODEL_ID
+from hr_agent.mock_data import EMPLOYEES
 
 load_dotenv(Path(__file__).parent.parent / "hr_agent" / ".env")
 
 MAX_STEPS = 6
 MODEL_ID = os.environ.get("MODEL_ID", DEFAULT_MODEL_ID)
 
-# find_employee/get_pto_balance take an ADK ToolContext to remember the current employee across
-# turns (Module 4); this loop has no ADK session, so it keeps that same state itself in a plain
-# dict and wraps the tools with a duck-typed stand-in, matching only the `.state` attribute the
-# tools actually use. Wrapping (not calling hr_tools directly) also keeps the declared schema
-# genai builds from these functions free of the tool_context parameter.
+# The ADK agent's own find_employee/get_pto_balance were retired in favor of MCP tools with a
+# caller-identity check (Module 6) -- machinery this framework-free loop has no session to carry,
+# so it keeps its own local copies against the same mock data instead of depending on a tool
+# contract that now lives behind the MCP boundary. _session_state is this loop's stand-in for
+# ADK session state (Module 4): a plain dict tracking which employee the conversation is about.
 _session_state: dict[str, Any] = {}
-_tool_context = SimpleNamespace(state=_session_state)
 
 
 def find_employee(name: str) -> dict[str, Any]:
-    return hr_tools.find_employee(name, _tool_context)  # ty: ignore[invalid-argument-type]
+    """Find employees by name to resolve an employee ID.
+
+    Use when the user refers to an employee by name and you need their ID for another tool.
+    Matching is case-insensitive and every word of the query must appear in the name, so
+    "alice" matches all Alices and "alice nguyen" matches one. If more than one employee
+    matches, do NOT choose: show the candidates and ask the user which one they mean.
+
+    Args:
+        name: Full or partial employee name, e.g. "Bob Smith" or "alice".
+
+    Returns:
+        {"status": "success", "matches": [{"employee_id", "name", "title"}]} for exactly one
+        match; {"status": "ambiguous", "matches": [...]} for several; {"status": "error",
+        "error": <reason>} for a blank name or no match (ask the user for the ID or a fuller name).
+    """
+    tokens = name.lower().split()
+    if not tokens:
+        return {"status": "error", "error": "Name is empty. Provide a full or partial name."}
+    matches = [
+        {"employee_id": employee_id, "name": e["name"], "title": e["title"]}
+        for employee_id, e in EMPLOYEES.items()
+        if all(t in e["name"].lower() for t in tokens)
+    ]
+    if not matches:
+        return {
+            "status": "error",
+            "error": f"No employee found matching '{name}'. Ask for the employee ID.",
+        }
+    if len(matches) == 1:
+        _session_state[hr_tools.CURRENT_EMPLOYEE_ID_KEY] = matches[0]["employee_id"]
+        return {"status": "success", "matches": matches}
+    return {"status": "ambiguous", "matches": matches}
 
 
 def get_pto_balance(employee_id: str) -> dict[str, Any]:
-    return hr_tools.get_pto_balance(employee_id, _tool_context)  # ty: ignore[invalid-argument-type]
+    """Look up an employee's remaining PTO and sick-leave balance.
+
+    Use when the user asks how much PTO, vacation, or sick time an employee has left.
+    Requires an employee ID; if the user gave only a name, ask for the ID instead of guessing.
+
+    Args:
+        employee_id: Employee ID in the form "E" plus four digits, e.g. "E1002".
+
+    Returns:
+        On success: {"status": "success", "employee_id", "name", "pto_hours", "sick_hours"},
+        with balances in hours. On failure: {"status": "error", "error": <reason>}.
+    """
+    normalized_id = employee_id.strip().upper()
+    employee = EMPLOYEES.get(normalized_id)
+    if employee is None:
+        return {
+            "status": "error",
+            "error": f"No employee found with ID '{employee_id}'. IDs look like 'E1002'.",
+        }
+    _session_state[hr_tools.CURRENT_EMPLOYEE_ID_KEY] = normalized_id
+    return {
+        "status": "success",
+        "employee_id": normalized_id,
+        "name": employee["name"],
+        "pto_hours": employee["pto_hours"],
+        "sick_hours": employee["sick_hours"],
+    }
 
 
-# The docstring is the tool contract genai's schema builder reads (see hr_agent/tools.py); copy
-# it by reference so the two never drift apart. Not functools.wraps: that also sets __wrapped__,
-# which inspect.signature() follows by default, unwrapping straight back to the original
-# function and its tool_context parameter -- the exact schema problem these wrappers avoid.
-find_employee.__doc__ = hr_tools.find_employee.__doc__
-get_pto_balance.__doc__ = hr_tools.get_pto_balance.__doc__
+INSTRUCTION = """\
+You are an HR operations assistant with no memory beyond this conversation. Answer only from
+tool results; never guess or infer an employee ID.
+
+Rules:
+- If the user gives a name, resolve it with find_employee. If it returns "ambiguous" or an
+  error, ask the user to clarify or give the employee ID (format like E1002); never pick a
+  candidate yourself.
+- If a tool returns status "error", tell the user plainly what went wrong; do not retry with
+  made-up input.
+- If a question needs several lookups, make each one and answer every part.
+- If the request is outside employee lookup, PTO/sick balances, and holidays, say you can't
+  help with it.
+"""
 
 TOOLS = {fn.__name__: fn for fn in (find_employee, get_pto_balance, hr_tools.list_holidays)}
 
