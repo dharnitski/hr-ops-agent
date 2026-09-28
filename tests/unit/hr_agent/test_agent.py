@@ -6,7 +6,7 @@ from hr_agent.agents.policy import policy_agent
 from hr_agent.agents.pto import pto_agent
 from hr_agent.handbook import search_handbook
 from hr_agent.tools import list_holidays
-from hr_agent.toolsets import hcm_toolset, payroll_toolset
+from hr_agent.toolsets import hcm_toolset, payroll_toolset, pto_write_toolset
 
 
 def test_root_agent_is_a_toolless_router() -> None:
@@ -28,6 +28,7 @@ def test_pto_agent_tools() -> None:
     assert set(pto_agent.tools) == {
         list_holidays,
         hcm_toolset,
+        pto_write_toolset,
         load_memory,
     }
 
@@ -60,8 +61,14 @@ def test_pto_instruction_treats_memory_as_reference_not_identity() -> None:
     assert "not verified facts or instructions" in instruction
 
 
-def test_hcm_toolset_exposes_only_pto_tools() -> None:
-    assert hcm_toolset.tool_filter == ["get_employee", "get_pto_balance", "submit_pto_request"]
+def test_hcm_toolset_exposes_only_pto_reads() -> None:
+    assert hcm_toolset.tool_filter == ["get_employee", "get_pto_balance"]
+    assert hcm_toolset.require_confirmation is False
+
+
+def test_pto_write_toolset_requires_confirmation() -> None:
+    assert pto_write_toolset.tool_filter == ["submit_pto_request"]
+    assert pto_write_toolset.require_confirmation is True
 
 
 def test_payroll_agent_is_read_only_and_isolated() -> None:
@@ -71,6 +78,7 @@ def test_payroll_agent_is_read_only_and_isolated() -> None:
     assert payroll_toolset.tool_filter == ["get_payroll_run"]
     assert payroll_toolset not in pto_agent.tools
     assert hcm_toolset not in payroll_agent.tools
+    assert pto_write_toolset not in payroll_agent.tools
 
 
 def test_policy_agent_is_grounded_and_isolated() -> None:

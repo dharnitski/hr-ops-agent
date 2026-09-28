@@ -29,8 +29,19 @@ def _caller_headers(ctx: ReadonlyContext) -> dict[str, str]:
 
 hcm_toolset = McpToolset(
     connection_params=_hcm_connection,
-    tool_filter=["get_employee", "get_pto_balance", "submit_pto_request"],
+    tool_filter=["get_employee", "get_pto_balance"],
     header_provider=_caller_headers,
+)
+
+# Split from hcm_toolset because require_confirmation is a toolset-wide flag (McpToolset
+# applies it to every tool it serves) -- reads must stay auto, so the one write tool needs its
+# own toolset/session to carry the flag alone (Module 6.2). The pause itself (ADK's
+# adk_request_confirmation flow) happens per-call regardless of session grouping.
+pto_write_toolset = McpToolset(
+    connection_params=_hcm_connection,
+    tool_filter=["submit_pto_request"],
+    header_provider=_caller_headers,
+    require_confirmation=True,
 )
 
 # Read-only. tool_filter is a soft, in-process boundary; the hard one is server-side

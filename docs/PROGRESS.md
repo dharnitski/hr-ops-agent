@@ -49,7 +49,8 @@ unchecked step.
 
 ## Module 6 — Safety and governance
 - [x] 1. Permission boundaries in tool/MCP layer (act as requesting user)
-- [ ] 2. Human-in-the-loop callbacks (PTO confirm, payroll manager approval)
+- [x] 2. Human-in-the-loop callbacks -- PTO confirm done; payroll manager approval blocked
+      (no payroll write tool exists to gate -- see decisions below)
 - [ ] 3. Audit log of every tool call
 - [ ] 4. Rate / blast-radius limits
 - [ ] 5. `docs/06-guardrail-standard.md`
@@ -237,8 +238,25 @@ been cut; see git history for the blow-by-blow if needed.
   exists for `find_employee`'s matching/not-found behavior. Not run live (see Open questions).
 - Left open: idempotency store is still one global dict keyed only by `idempotency_key`
   (M2.2), unscoped by caller -- two different, both-legitimate employees choosing the same key
-  string still collide. HITL confirmation, audit log, and rate/blast-radius limits (checklist
-  items 2-4) not started.
+  string still collide. Audit log and rate/blast-radius limits (checklist items 3-4) not
+  started.
+- **M6.2 (HITL callbacks):** used ADK's native `require_confirmation` (`@experimental`,
+  `FeatureName.TOOL_CONFIRMATION`) rather than a hand-rolled `before_tool_callback` gate --
+  `MCPTool`/`FunctionTool` already pause the call, emit an `adk_request_confirmation`
+  long-running function call with a hint, and resume on the next turn's `FunctionResponse`;
+  `adk web`/`adk run` already render and drive that exchange. `require_confirmation` is a
+  toolset-wide flag (`McpToolset`), not per-tool, so `hcm_toolset` (`hr_agent/toolsets.py`) was
+  split: reads (`get_employee`, `get_pto_balance`) stay auto, and the new `pto_write_toolset`
+  carries `submit_pto_request` alone with `require_confirmation=True`. Verified live
+  (`tests/integration/hr_agent/test_pto_confirmation_live.py`, 3 cases: pause happens, confirm
+  submits, reject doesn't) rather than through `adk web`'s UI, because no production code sets
+  `caller_employee_id` yet (see Open questions) -- a chat session there gets `forbidden` from
+  every HCM tool regardless of this feature, so the Runner/Event API was the only way to
+  exercise the confirmed path end to end.
+  Payroll manager approval (the other half of this step) is blocked, not skipped: there is no
+  payroll write tool anywhere in `mcp_server/` to gate (`get_payroll_run` is aggregate-only
+  reads) -- revisit once/if one is added, rather than building a placeholder just to demo
+  confirmation on it.
 
 ## Open questions
 
@@ -268,3 +286,9 @@ been cut; see git history for the blow-by-blow if needed.
   (only `mcp_server` tests cover that today).
 - Global idempotency store is unscoped by caller (flagged since M2.2) -- two legitimate
   employees reusing the same key string collide with a spurious conflict.
+- `require_confirmation`/`ToolConfirmation` (M6.2) is `@experimental` in ADK 2.9.2 -- reconfirm
+  it's stable (or find its replacement) before Module 7 deploys this for real; re-verify the
+  `adk web`/`adk run` HITL prompt UX too, since that's also new.
+- No payroll write tool exists (M6.2 left payroll manager-approval blocked on this) -- decide
+  whether Module 6 needs one built purely to exercise HITL/approval, or whether that waits for
+  a real use case.

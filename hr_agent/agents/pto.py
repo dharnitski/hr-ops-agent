@@ -7,7 +7,7 @@ from google.genai import types
 
 from ..config import MODEL_ID
 from ..tools import CURRENT_EMPLOYEE_ID_KEY, list_holidays
-from ..toolsets import hcm_toolset
+from ..toolsets import hcm_toolset, pto_write_toolset
 
 # Session state key: the most recently submitted PTO request this conversation made, so the
 # agent (and Module 6's confirmation step) can refer back to it without the user repeating
@@ -43,6 +43,11 @@ Rules:
   the identical request after a failure that gave no result; never for a different request.
   Report the request as pending, not approved. Never compute hours yourself; report what the
   tool returns.
+- submit_pto_request always pauses for the user's explicit approval before it runs -- this is
+  not an error. If its result says the call requires confirmation, tell the user you need
+  their go-ahead to submit and stop; do not call it again. If its result says the call was
+  rejected, tell the user plainly that they declined to submit it; do not retry or reinterpret
+  that as a different kind of failure.
 - The pending PTO request above (if any) is informational only, from earlier in this
   conversation. Never resubmit it; if the user asks about "the request" or "my last request",
   answer from it instead of calling a tool again.
@@ -123,7 +128,7 @@ pto_agent = Agent(
         "holidays, and PTO requests. Not for payroll, pay, or policy questions."
     ),
     instruction=INSTRUCTION,
-    tools=[list_holidays, hcm_toolset, load_memory],
+    tools=[list_holidays, hcm_toolset, pto_write_toolset, load_memory],
     after_tool_callback=_track_mcp_results,
     after_agent_callback=_persist_to_memory,
 )
