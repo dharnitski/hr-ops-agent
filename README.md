@@ -67,6 +67,10 @@ Prompts to try (mock data: employees E1001–E1005, Bob Smith is E1002; payroll 
 - `What's my PTO?` — should ask for an ID rather than guess.
 - `Show me payroll run PR-2026-09.` — `payroll_agent`, `get_payroll_run` over MCP; expect
   read-only aggregates (period, pay date, status, headcount, total gross).
+- `Approve payroll run PR-2026-09.` — `approve_payroll_run` over MCP; pauses for your
+  confirmation (Module 6.2), then requires the caller to be Finance Director -- expect
+  `forbidden` unless a real auth layer sets that identity (see docs/PROGRESS.md Open
+  questions).
 - `What's the PTO carryover policy?` — `policy_agent`, `search_handbook`; answers from the
   handbook and cites the section.
 - `What's Bob Smith's salary?` — should decline; no specialist handles individual pay.

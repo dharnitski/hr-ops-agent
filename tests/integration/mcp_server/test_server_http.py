@@ -43,6 +43,7 @@ async def test_lists_exactly_the_hcm_tools_with_output_schemas() -> None:
         "get_employee",
         "get_pto_balance",
         "get_payroll_run",
+        "approve_payroll_run",
         "submit_pto_request",
     }
     assert all(t.output_schema for t in tools)
@@ -104,6 +105,43 @@ async def test_get_payroll_run_forbidden_for_non_payroll_role_over_http() -> Non
     is_error, result = await _call("get_payroll_run", {"run_id": "PR-2026-09"})  # E1002 default
     assert not is_error
     assert result["result"]["code"] == "forbidden"
+
+
+async def test_approve_payroll_run_forbidden_for_payroll_specialist_over_http() -> None:
+    # Carla Gomez (E1003) is a Payroll Specialist -- can read runs but not approve them.
+    is_error, result = await _call(
+        "approve_payroll_run",
+        {"run_id": "PR-2026-08", "idempotency_key": f"it-{uuid.uuid4()}"},
+        caller_employee_id="E1003",
+    )
+    assert not is_error
+    assert result["result"]["code"] == "forbidden"
+
+
+async def test_approve_payroll_run_already_paid_is_invalid_state_over_http() -> None:
+    # PR-2026-08 starts "paid" in mock data and never changes status in this suite.
+    is_error, result = await _call(
+        "approve_payroll_run",
+        {"run_id": "PR-2026-08", "idempotency_key": f"it-{uuid.uuid4()}"},
+        caller_employee_id="E1004",
+    )
+    assert not is_error
+    assert result["result"]["code"] == "invalid_state"
+
+
+async def test_approve_payroll_run_succeeds_and_replays_over_http() -> None:
+    # The only test in this file that mutates PR-2026-09's status (draft -> approved) --
+    # safe because no other test here asserts that run's status.
+    args = {"run_id": "PR-2026-09", "idempotency_key": f"it-{uuid.uuid4()}"}
+    is_error, first = await _call("approve_payroll_run", args, caller_employee_id="E1004")
+    assert not is_error
+    assert first["result"]["status"] == "success"
+    assert first["result"]["run_status"] == "approved"
+    assert first["result"]["replayed"] is False
+
+    is_error, second = await _call("approve_payroll_run", args, caller_employee_id="E1004")
+    assert not is_error
+    assert second["result"]["replayed"] is True
 
 
 async def test_retry_with_same_key_replays_over_http() -> None:

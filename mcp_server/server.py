@@ -9,6 +9,7 @@ from mcp_server.handlers import (
     ErrorResult,
     IdempotencyKey,
     IsoDate,
+    PayrollApprovalResult,
     PayrollRunResult,
     PtoBalanceResult,
     PtoRequestResult,
@@ -88,6 +89,30 @@ async def get_payroll_run(run_id: RunId, ctx: Context) -> PayrollRunResult | Err
     return handlers.get_payroll_run(run_id, caller_employee_id=_caller_employee_id(ctx))
 
 
+async def approve_payroll_run(
+    run_id: RunId, idempotency_key: IdempotencyKey, ctx: Context
+) -> PayrollApprovalResult | ErrorResult:
+    """Approve a payroll run, moving it from draft to approved.
+
+    Restricted to callers whose title is Finance Director -- stricter than get_payroll_run's
+    read access (also open to Payroll Specialist). Only a draft run can be approved.
+
+    Args:
+        run_id: Payroll run ID such as "PR-2026-09".
+        idempotency_key: Caller-chosen unique string for this approval; reuse it only when
+            retrying the same request.
+
+    Returns:
+        On success: {"status": "success", "run_id", "run_status": "approved", "approved_by",
+        "replayed"}.
+        On failure: {"status": "error", "code", "error"}; code is one of not_found,
+        invalid_state, idempotency_conflict, invalid_key, forbidden.
+    """
+    return handlers.approve_payroll_run(
+        run_id, idempotency_key, caller_employee_id=_caller_employee_id(ctx)
+    )
+
+
 async def submit_pto_request(
     employee_id: EmployeeId,
     start_date: IsoDate,
@@ -150,6 +175,7 @@ mcp = MCPServer("hcm")
 mcp.tool()(get_employee)
 mcp.tool()(get_pto_balance)
 mcp.tool()(get_payroll_run)
+mcp.tool()(approve_payroll_run)
 mcp.tool()(submit_pto_request)
 _forbid_extra_arguments(mcp)
 

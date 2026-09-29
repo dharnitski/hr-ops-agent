@@ -2,8 +2,10 @@ from collections.abc import Iterator
 
 import pytest
 
+from hr_agent.mock_data import PAYROLL_RUNS
 from mcp_server import handlers
 from mcp_server.handlers import (
+    approve_payroll_run,
     get_employee,
     get_payroll_run,
     get_pto_balance,
@@ -44,6 +46,19 @@ def _reset_requests() -> Iterator[None]:
     handlers._pto_requests.clear()
     yield
     handlers._pto_requests.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_payroll_state() -> Iterator[None]:
+    # approve_payroll_run mutates PAYROLL_RUNS[...]["status"] in place (unlike
+    # submit_pto_request, which never touches EMPLOYEES) -- restore it so approval tests don't
+    # leak "approved" into get_payroll_run tests that assume PR-2026-09 starts "draft".
+    original_statuses = {run_id: run["status"] for run_id, run in PAYROLL_RUNS.items()}
+    handlers._payroll_approvals.clear()
+    yield
+    handlers._payroll_approvals.clear()
+    for run_id, status in original_statuses.items():
+        PAYROLL_RUNS[run_id]["status"] = status
 
 
 def test_get_employee_error_has_code() -> None:
@@ -276,5 +291,91 @@ def test_submit_pto_forbidden_checked_before_idempotency_store() -> None:
     result = submit_pto_request(
         "E1003", "2026-09-11", "2026-09-11", "k1", caller_employee_id="E1001"
     )
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_approve_payroll_run_success() -> None:
+    result = approve_payroll_run("PR-2026-09", "k1", caller_employee_id="E1004")
+    assert result["status"] == "success"
+    assert result["run_id"] == "PR-2026-09"
+    assert result["run_status"] == "approved"
+    assert result["approved_by"] == "E1004"
+    assert result["replayed"] is False
+    assert PAYROLL_RUNS["PR-2026-09"]["status"] == "approved"
+
+
+def test_approve_payroll_run_normalizes_ids() -> None:
+    result = approve_payroll_run(" pr-2026-09 ", "k1", caller_employee_id="e1004")
+    assert result["status"] == "success"
+    assert result["run_id"] == "PR-2026-09"
+
+
+def test_approve_payroll_run_forbidden_for_payroll_specialist() -> None:
+    # E1003 (Carla Gomez) is a Payroll Specialist -- can read runs but not approve them.
+    result = approve_payroll_run("PR-2026-09", "k1", caller_employee_id="E1003")
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+    assert PAYROLL_RUNS["PR-2026-09"]["status"] == "draft"
+
+
+def test_approve_payroll_run_forbidden_for_non_payroll_role() -> None:
+    result = approve_payroll_run("PR-2026-09", "k1", caller_employee_id="E1002")
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_approve_payroll_run_forbidden_when_no_caller_identity() -> None:
+    result = approve_payroll_run("PR-2026-09", "k1", caller_employee_id=None)
+    assert result["status"] == "error"
+    assert result["code"] == "forbidden"
+
+
+def test_approve_payroll_run_not_found() -> None:
+    result = approve_payroll_run("PR-1999-01", "k1", caller_employee_id="E1004")
+    assert result["status"] == "error"
+    assert result["code"] == "not_found"
+    assert "PR-2026-09" in result["error"]
+
+
+def test_approve_payroll_run_already_paid_is_invalid_state() -> None:
+    # PR-2026-08 starts "paid" in mock data.
+    result = approve_payroll_run("PR-2026-08", "k1", caller_employee_id="E1004")
+    assert result["status"] == "error"
+    assert result["code"] == "invalid_state"
+
+
+def test_approve_payroll_run_twice_is_invalid_state_not_a_silent_success() -> None:
+    approve_payroll_run("PR-2026-09", "k1", caller_employee_id="E1004")
+    result = approve_payroll_run("PR-2026-09", "k2", caller_employee_id="E1004")
+    assert result["status"] == "error"
+    assert result["code"] == "invalid_state"
+
+
+def test_approve_payroll_run_replay_returns_original() -> None:
+    first = approve_payroll_run("PR-2026-09", "k1", caller_employee_id="E1004")
+    again = approve_payroll_run("pr-2026-09", "k1", caller_employee_id="e1004")
+    assert first["status"] == "success"
+    assert again["status"] == "success"
+    assert again["replayed"] is True
+    assert len(handlers._payroll_approvals) == 1
+
+
+def test_approve_payroll_run_key_reuse_with_different_run_conflicts() -> None:
+    approve_payroll_run("PR-2026-09", "k1", caller_employee_id="E1004")
+    result = approve_payroll_run("PR-2026-08", "k1", caller_employee_id="E1004")
+    assert result["status"] == "error"
+    assert result["code"] == "idempotency_conflict"
+
+
+def test_approve_payroll_run_empty_key_is_invalid() -> None:
+    result = approve_payroll_run("PR-2026-09", "  ", caller_employee_id="E1004")
+    assert result["status"] == "error"
+    assert result["code"] == "invalid_key"
+
+
+def test_approve_payroll_run_forbidden_checked_before_run_lookup() -> None:
+    # An unauthorized caller shouldn't learn whether a run ID even exists.
+    result = approve_payroll_run("PR-1999-01", "k1", caller_employee_id="E1002")
     assert result["status"] == "error"
     assert result["code"] == "forbidden"

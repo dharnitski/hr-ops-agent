@@ -16,7 +16,13 @@ from mcp_server import handlers
 from mcp_server.handlers import IsoDate
 from mcp_server.server import mcp
 
-TOOLS = {"get_employee", "get_pto_balance", "get_payroll_run", "submit_pto_request"}
+TOOLS = {
+    "get_employee",
+    "get_pto_balance",
+    "get_payroll_run",
+    "approve_payroll_run",
+    "submit_pto_request",
+}
 
 
 @pytest.fixture(autouse=True)

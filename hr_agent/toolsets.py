@@ -47,8 +47,20 @@ pto_write_toolset = McpToolset(
 # Read-only. tool_filter is a soft, in-process boundary; the hard one is server-side
 # authorization -- a role check (Payroll Specialist/Finance Director) in mcp_server/handlers.py,
 # using the same caller-identity header as hcm_toolset.
-payroll_toolset = McpToolset(
+payroll_read_toolset = McpToolset(
     connection_params=_hcm_connection,
     tool_filter=["get_payroll_run"],
     header_provider=_caller_headers,
+)
+
+# Manager approval only (Module 6.2): require_confirmation pauses every call for human
+# sign-off, same mechanism as pto_write_toolset above and split out for the same reason (the
+# flag is toolset-wide). Server-side role check (Finance Director only, stricter than
+# payroll_read_toolset's read access) is the hard boundary; confirmation is the added
+# human-in-the-loop layer on top, not a replacement for it.
+payroll_write_toolset = McpToolset(
+    connection_params=_hcm_connection,
+    tool_filter=["approve_payroll_run"],
+    header_provider=_caller_headers,
+    require_confirmation=True,
 )

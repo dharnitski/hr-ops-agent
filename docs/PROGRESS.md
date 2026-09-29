@@ -49,8 +49,7 @@ unchecked step.
 
 ## Module 6 — Safety and governance
 - [x] 1. Permission boundaries in tool/MCP layer (act as requesting user)
-- [x] 2. Human-in-the-loop callbacks -- PTO confirm done; payroll manager approval blocked
-      (no payroll write tool exists to gate -- see decisions below)
+- [x] 2. Human-in-the-loop callbacks (PTO confirm, payroll manager approval)
 - [ ] 3. Audit log of every tool call
 - [ ] 4. Rate / blast-radius limits
 - [ ] 5. `docs/06-guardrail-standard.md`
@@ -253,10 +252,22 @@ been cut; see git history for the blow-by-blow if needed.
   `caller_employee_id` yet (see Open questions) -- a chat session there gets `forbidden` from
   every HCM tool regardless of this feature, so the Runner/Event API was the only way to
   exercise the confirmed path end to end.
-  Payroll manager approval (the other half of this step) is blocked, not skipped: there is no
-  payroll write tool anywhere in `mcp_server/` to gate (`get_payroll_run` is aggregate-only
-  reads) -- revisit once/if one is added, rather than building a placeholder just to demo
-  confirmation on it.
+  Payroll manager approval (the other half of this step) added a minimal write tool,
+  `approve_payroll_run` (`mcp_server/handlers.py`): moves a run `draft` -> `approved`,
+  idempotent the same way as `submit_pto_request`, gated by the same `require_confirmation`
+  mechanism via a new `payroll_write_toolset` (split from `payroll_read_toolset`, formerly
+  `payroll_toolset`, for the same toolset-wide-flag reason as `pto_write_toolset`). Role check
+  is `Finance Director` only -- stricter than `get_payroll_run`'s reader set (which also
+  includes `Payroll Specialist`): separation of duties, matching "manager approval" in
+  `docs/COURSE.md`. Unlike `submit_pto_request`, the write does mutate shared mock state
+  (`PAYROLL_RUNS[...]["status"]`) rather than leaving it to a downstream approval step, since
+  approval *is* the state change here; unit tests reset it via an autouse fixture
+  (`tests/unit/mcp_server/test_handlers.py`). Covered by handler unit tests, MCP-boundary
+  integration tests (`tests/integration/mcp_server/test_server_http.py`), and the same
+  toolset-config unit tests as PTO's -- no new live agent-level confirmation test, since
+  M6.2's PTO test already proved the generic ADK mechanism; re-testing the identical mechanism
+  through a second tool would be redundant. Not wired into any eval case yet (M5 gap, not
+  addressed here).
 
 ## Open questions
 
@@ -276,10 +287,11 @@ been cut; see git history for the blow-by-blow if needed.
 - The router's "unclear vs. a detail the specialist should resolve" distinction has needed two
   separate fixes already from unrelated features -- candidate for its own eval category rather
   than one-off fixes as they're found.
-- No production code sets `caller_employee_id` (no login flow) -- all four MCP tools are
-  correctly unreachable for a real user until real auth exists; decide whether that's
-  acceptable to ship as-is or needs a stub identity source sooner. No live fixture exercises an
-  authorized `get_payroll_run` call (payroll-role caller) end to end.
+- No production code sets `caller_employee_id` (no login flow) -- all five MCP tools
+  (including M6.2's `approve_payroll_run`) are correctly unreachable for a real user until
+  real auth exists; decide whether that's acceptable to ship as-is or needs a stub identity
+  source sooner. No live fixture exercises an authorized `get_payroll_run` or
+  `approve_payroll_run` call (payroll-role caller) end to end.
 - Eval suite is down to 29 cases and thinner on the "ambiguous" category after `find_employee`'s
   retirement; still no case exercising the one self-only scenario that matters most -- a caller
   asking about a *different*, valid employee ID and getting `forbidden` from the live agent
@@ -289,6 +301,6 @@ been cut; see git history for the blow-by-blow if needed.
 - `require_confirmation`/`ToolConfirmation` (M6.2) is `@experimental` in ADK 2.9.2 -- reconfirm
   it's stable (or find its replacement) before Module 7 deploys this for real; re-verify the
   `adk web`/`adk run` HITL prompt UX too, since that's also new.
-- No payroll write tool exists (M6.2 left payroll manager-approval blocked on this) -- decide
-  whether Module 6 needs one built purely to exercise HITL/approval, or whether that waits for
-  a real use case.
+- `approve_payroll_run` (M6.2) has no eval case; adding one needs an `adk eval` case that
+  models the confirmation pause and resume, which no existing case does -- work out that
+  pattern before the eval suite claims payroll approval is covered.

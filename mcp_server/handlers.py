@@ -45,6 +45,7 @@ ErrorCode = Literal[
     "no_working_days",
     "idempotency_conflict",
     "invalid_key",
+    "invalid_state",
     "forbidden",
 ]
 
@@ -79,6 +80,14 @@ class PayrollRunResult(TypedDict):
     run_status: Literal["draft", "approved", "paid"]
     employee_count: int
     total_gross: float
+
+
+class PayrollApprovalResult(TypedDict):
+    status: Literal["success"]
+    run_id: str
+    run_status: Literal["approved"]
+    approved_by: str
+    replayed: bool
 
 
 class PtoRequestResult(TypedDict):
@@ -240,6 +249,99 @@ def get_payroll_run(
         "employee_count": run["employee_count"],
         "total_gross": run["total_gross"],
     }
+
+
+# Titles authorized to approve a payroll run -- a subset of PAYROLL_READER_TITLES, not the
+# same set: separation of duties. A Payroll Specialist prepares/reads a run but only a Finance
+# Director (the "manager" in "payroll needs manager approval") can approve it.
+PAYROLL_APPROVER_TITLES = frozenset({"Finance Director"})
+
+# In-memory stand-in for the HCM write path: idempotency_key -> (run_id, stored result).
+_payroll_approvals: dict[str, tuple[str, PayrollApprovalResult]] = {}
+
+
+def _check_approver_and_key(
+    caller_employee_id: str | None, idempotency_key: str
+) -> str | ErrorResult:
+    """Role and key-format checks that must run before the idempotency store or any run
+    lookup is touched -- merged into one helper only to keep approve_payroll_run's
+    return-statement count under the linter's limit, same as submit_pto_request's
+    _check_caller_and_key. Returns the stripped key on success, or an error dict."""
+    _, caller = _lookup(caller_employee_id or "")
+    if caller is None or caller["title"] not in PAYROLL_APPROVER_TITLES:
+        return _error(
+            "forbidden",
+            "Not authorized to approve payroll runs. Requires the Finance Director role.",
+        )
+    key = idempotency_key.strip()
+    if not key:
+        return _error("invalid_key", "idempotency_key must be a non-empty string.")
+    return key
+
+
+def approve_payroll_run(
+    run_id: RunId, idempotency_key: IdempotencyKey, *, caller_employee_id: str | None
+) -> PayrollApprovalResult | ErrorResult:
+    """Approve a payroll run, moving it from draft to approved.
+
+    Restricted to callers whose title is Finance Director -- stricter than get_payroll_run's
+    read access (also open to Payroll Specialist). Only a draft run can be approved; an
+    already-approved or paid run returns invalid_state.
+
+    Safe to retry: repeating a call with the same idempotency_key and run_id returns the
+    original result ("replayed": true) and approves nothing twice.
+
+    Args:
+        run_id: Payroll run ID such as "PR-2026-09".
+        idempotency_key: Caller-chosen unique string for this approval; reuse it only when
+            retrying the same request.
+        caller_employee_id: The requesting session's own employee ID, established by the
+            transport -- never a model-supplied argument (Module 6).
+
+    Returns:
+        On success: {"status": "success", "run_id", "run_status": "approved", "approved_by",
+        "replayed"}.
+        On failure: {"status": "error", "code", "error"}; code is one of not_found,
+        invalid_state, idempotency_conflict, invalid_key, forbidden.
+    """
+    checked = _check_approver_and_key(caller_employee_id, idempotency_key)
+    if not isinstance(checked, str):
+        return checked
+    key = checked
+    normalized_caller = _normalize_id(caller_employee_id or "")
+
+    normalized_id = _normalize_id(run_id)
+    prior = _payroll_approvals.get(key)
+    if prior is not None:
+        if prior[0] != normalized_id:
+            return _error(
+                "idempotency_conflict",
+                f"idempotency_key '{key}' was already used with a different run_id. "
+                "Use a new key for a new request.",
+            )
+        return {**prior[1], "replayed": True}
+
+    run = PAYROLL_RUNS.get(normalized_id)
+    if run is None:
+        known = ", ".join(sorted(PAYROLL_RUNS))
+        return _error("not_found", f"No payroll run with ID '{run_id}'. Known runs: {known}.")
+    if run["status"] != "draft":
+        return _error(
+            "invalid_state",
+            f"Run '{normalized_id}' is already '{run['status']}'; only a draft run can be "
+            "approved.",
+        )
+
+    run["status"] = "approved"
+    result: PayrollApprovalResult = {
+        "status": "success",
+        "run_id": normalized_id,
+        "run_status": "approved",
+        "approved_by": normalized_caller,
+        "replayed": False,
+    }
+    _payroll_approvals[key] = (normalized_id, result)
+    return result
 
 
 def _working_hours(start: date, end: date) -> float:
