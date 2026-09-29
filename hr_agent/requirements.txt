@@ -1,0 +1,6 @@
+# adk deploy agent_engine auto-generates this file with just google-adk[a2a] if it doesn't
+# already exist -- google-adk treats mcp as optional (lazily imported only when MCP-tool
+# features are used, not a hard install_requires), so a deploy with no requirements.txt here
+# builds a container missing it, even though pyproject.toml depends on it directly. google-adk
+# itself and google-cloud-aiplatform are appended automatically by the deploy tool.
+mcp==2.2.0

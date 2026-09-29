@@ -65,11 +65,19 @@ this stack moves fast and these notes will drift.
   GCS bucket needed. `--region` must be a real region (e.g. `us-central1`); the `.env`'s
   `GOOGLE_CLOUD_LOCATION=global` (correct for Gemini 3.x model serving) does not apply here
   and is ignored once `--region` is passed explicitly.
-  **Gotcha:** the deploy API now rejects any `.env` variable with an empty value
+  **Gotcha 1:** the deploy API now rejects any `.env` variable with an empty value
   (`Required field is not set` on `deployment_spec.env[n].value`) — a `KEY=` line that used
   to just do nothing locally hard-fails a cloud deploy. Audit `.env` for empty values before
   deploying; this project had two dead ones (`HCM_API_BASE_URL`/`HCM_API_KEY`, unused
   placeholders from before mock data replaced a real HCM integration) that had to be deleted.
+  **Gotcha 2:** if the agent folder has no `requirements.txt` of its own, the deploy tool
+  writes one containing only `google-adk[a2a]==<version>` (plus `google-cloud-aiplatform`) —
+  it does **not** read `pyproject.toml`/`uv.lock`. Any dependency this project needs beyond
+  what `google-adk` itself hard-requires (here: `mcp`, which ADK only imports lazily for
+  MCP-tool features, so it's not in ADK's own install_requires) must be listed in a
+  hand-written `<agent_folder>/requirements.txt`, or the deployed container 500s on import
+  with `ModuleNotFoundError`. Caught live via the Agent Engine playground, not the deploy
+  command itself — the deploy succeeds even when the resulting container can't actually run.
   `adk deploy cloud_run ...`/`adk deploy gke ...` not yet re-verified against current docs.
 - **Memory Bank still current** for Module 4 long-term memory, now documented as "Agent
   Platform Memory Bank"; ADK auto-orchestrates store/retrieve calls against it when

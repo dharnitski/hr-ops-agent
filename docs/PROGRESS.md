@@ -346,6 +346,19 @@ been cut; see git history for the blow-by-blow if needed.
   Bash permission for cloud deploys has to be a manual action the user takes themselves; the
   user added `.claude/settings.local.json` (gitignored, machine-local, not `settings.json`)
   with `"Bash(adk deploy *)"`/`"Bash(uv run adk deploy *)"` allow rules.
+  **Second deploy blocker, found live via the playground:** the deployed agent crashed on
+  import with `ModuleNotFoundError: No module named 'mcp'`. Root cause in
+  `cli_deploy.py`: when the agent folder has no `requirements.txt` of its own, the deploy tool
+  generates one containing only `google-adk[a2a]==<version>` (plus `google-cloud-aiplatform`,
+  appended automatically) -- it does not read `pyproject.toml`/`uv.lock` at all. `mcp` is not
+  a hard dependency of `google-adk` itself (lazily imported only when MCP-tool features are
+  used), so it never reached the deployed container even though this project depends on it
+  directly. Fixed with a hand-written `hr_agent/requirements.txt` containing just `mcp==2.2.0`
+  (the version this project is actually tested against); `google-adk`/`google-cloud-aiplatform`
+  still get auto-appended since the file doesn't declare `google-cloud-aiplatform` itself.
+  Redeployed in place with `--agent_engine_id=3717518632499019776` (updates the existing
+  resource rather than creating a second one) -- succeeded. Not yet re-confirmed live via the
+  playground after this fix.
 
 ## Open questions
 
