@@ -357,8 +357,29 @@ been cut; see git history for the blow-by-blow if needed.
   (the version this project is actually tested against); `google-adk`/`google-cloud-aiplatform`
   still get auto-appended since the file doesn't declare `google-cloud-aiplatform` itself.
   Redeployed in place with `--agent_engine_id=3717518632499019776` (updates the existing
-  resource rather than creating a second one) -- succeeded. Not yet re-confirmed live via the
-  playground after this fix.
+  resource rather than creating a second one) -- succeeded.
+  **Third deploy blocker, found live via Cloud Logging (not the playground -- the console's
+  log viewer surfaced a stale cached entry from the first crash, which cost a round-trip
+  before the timestamps were checked directly against the resource's `updateTime` via the
+  REST API):** `ImportError: cannot import name 'override' from 'typing'`. Agent Engine's
+  managed runtime pins **Python 3.11** regardless of this project's own `requires-python`
+  (3.14) -- `typing.override` is stdlib-only since 3.12. Fixed in `hr_agent/audit.py` by
+  importing from `typing_extensions` instead (a strict superset, re-exports the stdlib
+  version when available; already a hard dependency of `google-adk`, so no new
+  `requirements.txt` entry needed) with a `# noqa: UP035` since ruff's `target-version =
+  "py314"` would otherwise "fix" it back. Confirmed via `git grep` that no other file in
+  `hr_agent/` uses 3.12+-only syntax.
+  **Verified working end to end** by querying the deployed resource directly over its
+  `:streamQuery` REST API (`class_method: stream_query`), not by asking the user to retest in
+  the UI: a policy question correctly routed to `policy_agent`, called `search_handbook`, and
+  returned a grounded, cited answer -- full multi-step tool orchestration with no crash. A PTO
+  question never reached `get_pto_balance` (the one path that would have hit the expected
+  `localhost:8000` connection failure): with no real caller identity in session state,
+  `pto_agent` reasoned from its own self-only-permission instruction and declined the lookup
+  proactively across three separate phrasings, rather than calling the tool and getting
+  `forbidden` back. Not a deploy problem -- a legitimate demonstration that M6.1's
+  permission-boundary reasoning holds even on a cold deploy with no auth wired in, just not
+  the exact failure mode originally expected to observe.
 
 ## Open questions
 

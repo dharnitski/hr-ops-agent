@@ -78,6 +78,17 @@ this stack moves fast and these notes will drift.
   hand-written `<agent_folder>/requirements.txt`, or the deployed container 500s on import
   with `ModuleNotFoundError`. Caught live via the Agent Engine playground, not the deploy
   command itself — the deploy succeeds even when the resulting container can't actually run.
+  **Gotcha 3:** the managed runtime pins **Python 3.11**, independent of this project's own
+  `requires-python` (3.14) or local dev/CI Python version — 3.12+-only stdlib (e.g.
+  `typing.override`, PEP 698) breaks at import time in the deployed container while working
+  fine everywhere else. Prefer `typing_extensions` over stdlib `typing` for anything version-
+  gated like this; it re-exports the stdlib symbol when available, so there's no local cost.
+  **Debugging note:** the Agent Engine playground's log viewer can surface a stale cached
+  error from a prior crash instead of the current one — cross-check against the resource's
+  `updateTime` (`GET .../reasoningEngines/{id}`) or query Cloud Logging with
+  `timestamp>="<updateTime>"` before concluding a fix didn't work. Querying the deployed
+  resource directly over its `:streamQuery` REST method (`class_method: stream_query`) is a
+  reliable way to verify a fix without relying on the console UI at all.
   `adk deploy cloud_run ...`/`adk deploy gke ...` not yet re-verified against current docs.
 - **Memory Bank still current** for Module 4 long-term memory, now documented as "Agent
   Platform Memory Bank"; ADK auto-orchestrates store/retrieve calls against it when
