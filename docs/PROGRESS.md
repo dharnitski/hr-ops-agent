@@ -347,6 +347,13 @@ been cut; see git history for the blow-by-blow if needed.
   fired and the real balance came back; a follow-up asking about E1003 in the *same* session
   reused the established identity (no re-ask) and correctly got `forbidden` -- proving the stub
   grants exactly one identity per session, not blanket access.
+  Redeployed to Agent Engine (same `--env_file`/`--extra_packages=mcp_server` command as
+  before) and re-ran the identical three-turn check against the live resource via a real
+  session (`async_create_session`, not a bare `session_id` string -- `stream_query` silently
+  no-ops on one that was never created): identical result over the actual cloud path --
+  ask -> `identify_caller` + `get_pto_balance` succeed -> a different employee ID in the same
+  session gets `forbidden`. The full HCM-reachability-plus-identity arc is now provably
+  working end to end on the deployed agent, not just locally.
   Checked all 29 eval cases against this change: 28 already pre-seed `caller_employee_id` in
   `session_input.state` (M6.1's original test-fixture pattern), so the new instruction rule
   ("ask if empty") never fires for them -- unaffected. One adversarial case does not
