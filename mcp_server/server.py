@@ -1,6 +1,9 @@
 """MCP server wiring. Keep thin: logic lives in handlers.py."""
 
+import os
+
 from mcp.server.mcpserver import Context, MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 
 from mcp_server import handlers
 from mcp_server.handlers import (
@@ -183,7 +186,28 @@ _forbid_extra_arguments(mcp)
 
 
 def main() -> None:
-    mcp.run(transport="streamable-http")
+    """Run the server. Local dev: `HOST`/`PORT`/`MCP_ALLOWED_HOSTS` unset, binds
+    127.0.0.1:8000 with DNS-rebinding protection off (this version's backwards-compat
+    default for no `transport_security`) -- fine on a loopback-only bind.
+    Cloud Run: injects `PORT`; `HOST=0.0.0.0` and `MCP_ALLOWED_HOSTS` (the service's own
+    hostname, comma-separated if there's more than one) must be set explicitly -- Cloud Run
+    IAM decides *who* may call in, this decides what Host header the server itself accepts.
+    """
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "8000"))
+    allowed_hosts = [
+        h.strip() for h in os.environ.get("MCP_ALLOWED_HOSTS", "").split(",") if h.strip()
+    ]
+    transport_security = (
+        TransportSecuritySettings(allowed_hosts=allowed_hosts) if allowed_hosts else None
+    )
+
+    mcp.run(
+        transport="streamable-http",
+        host=host,
+        port=port,
+        transport_security=transport_security,
+    )
 
 
 if __name__ == "__main__":

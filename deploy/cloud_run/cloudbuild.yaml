@@ -1,0 +1,13 @@
+# Builds mcp_server.Dockerfile with the repo root as build context. `gcloud builds submit
+# --tag` can't do this on its own -- it only auto-builds a Dockerfile literally named
+# `Dockerfile` at the source root, and this one is deliberately named/located to make clear
+# it packages mcp_server, not the agent (7.2's agent-on-Cloud-Run was skipped).
+#
+# Usage (from repo root):
+#   gcloud builds submit --config=deploy/cloud_run/cloudbuild.yaml \
+#     --substitutions=_IMAGE=us-central1-docker.pkg.dev/PROJECT_ID/hr-ops-agent/mcp-server:TAG .
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "deploy/cloud_run/mcp_server.Dockerfile", "-t", "$_IMAGE", "."]
+images:
+  - "$_IMAGE"

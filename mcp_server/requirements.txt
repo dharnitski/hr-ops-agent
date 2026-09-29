@@ -1,0 +1,7 @@
+# Deliberately not `uv sync` / uv.lock: this project's single pyproject.toml also depends on
+# google-adk (for hr_agent), which mcp_server must never pull in -- see docs/PROGRESS.md's
+# HCM-reachability decision. mcp_server's actual code needs only mcp itself; mcp==2.2.0
+# already declares starlette/uvicorn/pydantic/anyio as its own hard dependencies. Pinned to
+# match uv.lock's resolved version (mirrors hr_agent/requirements.txt's same pattern for the
+# Agent Engine deploy).
+mcp==2.2.0
