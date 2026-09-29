@@ -10,11 +10,17 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Any, override
+from typing import Any
 
 from google.adk.plugins.base_plugin import BasePlugin
 from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.tool_context import ToolContext
+
+# Not `from typing import override` (stdlib since 3.12, and what ruff's UP035 wants for this
+# project's local/CI target of 3.14): Agent Engine's managed runtime pins Python 3.11
+# regardless of this project's own requires-python (confirmed live, M7.1) -- typing_extensions
+# re-exports the stdlib version when available, so this is a strict superset with no local cost.
+from typing_extensions import override  # noqa: UP035
 
 from .toolsets import CALLER_EMPLOYEE_ID_STATE_KEY
 
