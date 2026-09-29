@@ -5,6 +5,7 @@ from google.adk.plugins.context_filter_plugin import ContextFilterPlugin
 from .agents.payroll import payroll_agent
 from .agents.policy import policy_agent
 from .agents.pto import pto_agent
+from .audit import AuditLogPlugin
 from .config import MODEL_ID
 
 # Module 4.3: without this, every turn resends the full conversation -- every past tool call
@@ -46,5 +47,8 @@ root_agent = Agent(
 app = App(
     name="hr_agent",
     root_agent=root_agent,
-    plugins=[ContextFilterPlugin(num_invocations_to_keep=NUM_INVOCATIONS_TO_KEEP)],
+    plugins=[
+        ContextFilterPlugin(num_invocations_to_keep=NUM_INVOCATIONS_TO_KEEP),
+        AuditLogPlugin(),
+    ],
 )

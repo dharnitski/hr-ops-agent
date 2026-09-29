@@ -18,9 +18,13 @@ def _model_turn(text: str) -> types.Content:
     return types.Content(role="model", parts=[types.Part(text=text)])
 
 
-def test_app_configures_one_context_filter_plugin() -> None:
-    assert len(app.plugins) == 1
+def test_app_configures_the_context_filter_plugin_first() -> None:
+    # Index 0 matters: the other tests here grab app.plugins[0] specifically.
     assert app.plugins[0].__class__.__name__ == "ContextFilterPlugin"
+    assert {p.__class__.__name__ for p in app.plugins} == {
+        "ContextFilterPlugin",
+        "AuditLogPlugin",
+    }
 
 
 async def test_old_invocations_are_dropped_from_the_model_request(

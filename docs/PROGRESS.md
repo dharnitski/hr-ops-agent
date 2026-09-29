@@ -50,7 +50,7 @@ unchecked step.
 ## Module 6 — Safety and governance
 - [x] 1. Permission boundaries in tool/MCP layer (act as requesting user)
 - [x] 2. Human-in-the-loop callbacks (PTO confirm, payroll manager approval)
-- [ ] 3. Audit log of every tool call
+- [x] 3. Audit log of every tool call
 - [ ] 4. Rate / blast-radius limits
 - [ ] 5. `docs/06-guardrail-standard.md`
 
@@ -268,6 +268,34 @@ been cut; see git history for the blow-by-blow if needed.
   M6.2's PTO test already proved the generic ADK mechanism; re-testing the identical mechanism
   through a second tool would be redundant. Not wired into any eval case yet (M5 gap, not
   addressed here).
+- **M6.3 (audit log):** `AuditLogPlugin` (`hr_agent/audit.py`), a `google.adk.plugins.
+  BasePlugin` hooked into `before_tool_callback`/`after_tool_callback`/`on_tool_error_callback`
+  and wired app-wide via `App(plugins=[...])` in `hr_agent/agent.py` -- fires once per tool
+  call across every specialist and both local and MCP tools, unlike a per-agent
+  `after_tool_callback` (e.g. `pto_agent`'s `_track_mcp_results`), which only sees that one
+  agent's own calls. Caller identity comes from session state
+  (`CALLER_EMPLOYEE_ID_STATE_KEY`), the same transport-established value M6.1 already trusts --
+  never a tool argument.
+  Every field is allowlisted, not blocklisted: `args`/`result` dicts are redacted down to
+  identifiers and outcomes (`employee_id`, `run_id`, `status`, `code`, ...), dropping anything
+  not explicitly named -- including free-text business-error messages, which can embed a
+  balance (e.g. `submit_pto_request`'s "Request needs 16h but balance is 8h."). A tool
+  exception logs its type name only (`on_tool_error_callback`), not `str(error)`, for the same
+  reason. Emits via the standard `logging` module (logger `hr_agent.audit`) -- a real sink
+  (Cloud Logging, BigQuery) is a Module 7+ decision, not this one.
+  Known gap: the ADK-generated confirmation-pause/reject dict (`{"error": "This tool call
+  requires confirmation..."}`) has no `status`/`code` field to redact to, so a paused or
+  rejected write logs an empty `result` -- the call itself, agent, tool, and caller are still
+  recorded, just not which of the two outcomes it was. Not fixed here because the alternative
+  (pattern-matching that ADK-internal string) is more fragile than the fidelity it would buy.
+  A plugin only applies to the `App` it's registered on, not to an `Agent` run directly --
+  `tests/integration/hr_agent/conftest.py`'s `ask`/`conversation`/`sessions` fixtures build
+  their `Runner` around `root_agent`, so none of them exercise this plugin (same caveat
+  `hr_agent/agent.py`'s own comment already notes for `ContextFilterPlugin`). Verified instead
+  by a dedicated live test running `app` directly
+  (`tests/integration/hr_agent/test_audit_log_live.py`) against the real MCP server, confirming
+  the hand-fabricated MCP wire shape in the unit tests matches a real `MCPTool.run_async`
+  result and that the real `pto_hours` figure does not reach the log.
 
 ## Open questions
 
