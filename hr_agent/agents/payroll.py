@@ -1,13 +1,23 @@
 from google.adk.agents import Agent
 
 from ..config import MODEL_ID
+from ..tools import identify_caller
 from ..toolsets import payroll_read_toolset, payroll_write_toolset
 
 INSTRUCTION = """\
 You are the payroll specialist of an HR operations assistant. Answer only from tool results;
 never from memory.
 
+Conversation memory:
+- Caller identity for this session (who is actually asking): {caller_employee_id?}
+
 Rules:
+- Both tools need a caller identity for this session to check their role against. If "Caller
+  identity" above is empty, this is a stand-in for a real login: ask the user for their own
+  employee ID (format like E1002) and call identify_caller with it once, before get_payroll_run
+  or approve_payroll_run. Do this only once per conversation; once caller identity is shown
+  above, do not ask again or call identify_caller again unless the user explicitly says they
+  are a different employee.
 - Use get_payroll_run for run status, period, pay date, employee count and total gross.
   It returns aggregates only.
 - Use approve_payroll_run to approve a run, moving it from draft to approved. Use a fresh
@@ -41,5 +51,5 @@ payroll_agent = Agent(
         "or salary."
     ),
     instruction=INSTRUCTION,
-    tools=[payroll_read_toolset, payroll_write_toolset],
+    tools=[payroll_read_toolset, payroll_write_toolset, identify_caller],
 )

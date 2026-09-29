@@ -5,7 +5,7 @@ from hr_agent.agents.payroll import payroll_agent
 from hr_agent.agents.policy import policy_agent
 from hr_agent.agents.pto import pto_agent
 from hr_agent.handbook import search_handbook
-from hr_agent.tools import list_holidays
+from hr_agent.tools import identify_caller, list_holidays
 from hr_agent.toolsets import (
     hcm_toolset,
     payroll_read_toolset,
@@ -35,6 +35,7 @@ def test_pto_agent_tools() -> None:
         hcm_toolset,
         pto_write_toolset,
         load_memory,
+        identify_caller,
     }
 
 
@@ -79,7 +80,7 @@ def test_pto_write_toolset_requires_confirmation() -> None:
 def test_payroll_agent_tools_and_isolation() -> None:
     assert payroll_agent.name == "payroll_agent"
     assert payroll_agent.description
-    assert payroll_agent.tools == [payroll_read_toolset, payroll_write_toolset]
+    assert payroll_agent.tools == [payroll_read_toolset, payroll_write_toolset, identify_caller]
     assert payroll_read_toolset.tool_filter == ["get_payroll_run"]
     assert payroll_read_toolset not in pto_agent.tools
     assert hcm_toolset not in payroll_agent.tools

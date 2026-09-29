@@ -6,7 +6,7 @@ from google.adk.tools import BaseTool, ToolContext, load_memory
 from google.genai import types
 
 from ..config import MODEL_ID
-from ..tools import CURRENT_EMPLOYEE_ID_KEY, list_holidays
+from ..tools import CURRENT_EMPLOYEE_ID_KEY, identify_caller, list_holidays
 from ..toolsets import hcm_toolset, pto_write_toolset
 
 # Session state key: the most recently submitted PTO request this conversation made, so the
@@ -23,8 +23,15 @@ never from memory.
 Conversation memory:
 - Employee currently in context: {current_employee_id?}
 - Pending PTO request from this conversation: {pending_pto_request?}
+- Caller identity for this session (who is actually asking): {caller_employee_id?}
 
 Rules:
+- Self-service and PTO-request tools need a caller identity for this session. If "Caller
+  identity" above is empty, this is a stand-in for a real login: ask the user for their own
+  employee ID (format like E1002) and call identify_caller with it once, before using
+  get_employee, get_pto_balance, or submit_pto_request. Do this only once per conversation;
+  once caller identity is shown above, do not ask again or call identify_caller again unless
+  the user explicitly says they are a different employee.
 - Never guess or infer an employee ID. There is no name lookup: if the user gives a name
   instead of an ID, ask for their employee ID (format like E1002); never pick or assume one
   yourself. If no ID is given and no employee is in context above, ask for one. If one is in
@@ -128,7 +135,7 @@ pto_agent = Agent(
         "holidays, and PTO requests. Not for payroll, pay, or policy questions."
     ),
     instruction=INSTRUCTION,
-    tools=[list_holidays, hcm_toolset, pto_write_toolset, load_memory],
+    tools=[list_holidays, hcm_toolset, pto_write_toolset, load_memory, identify_caller],
     after_tool_callback=_track_mcp_results,
     after_agent_callback=_persist_to_memory,
 )

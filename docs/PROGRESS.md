@@ -327,6 +327,36 @@ been cut; see git history for the blow-by-blow if needed.
   20 real calls. No live agent-level test added for either limit: both are plain business-error
   results the agent already knows how to relay, unlike M6.2's confirmation pause, which needed
   its own mechanism-level proof.
+- **`identify_caller` (2026-09-29, prompted by M7's live deploy making the "always forbidden"
+  gap visible for the first time):** every MCP tool has been correctly unreachable for a real
+  user since M6.1 -- nothing ever set `caller_employee_id`, because there's no login flow, and
+  building one is out of this course's syllabus (a real identity-provider integration, not an
+  ADK/agent-pattern topic). Rather than build real auth or leave the gap, added
+  `identify_caller(employee_id, tool_context)` (`hr_agent/tools.py`): a plain local tool that
+  writes `tool_context.state[CALLER_EMPLOYEE_ID_STATE_KEY]` from the user's own stated ID.
+  Explicitly labeled in its docstring as NOT authentication -- it answers "which identity is
+  this session claiming", never "is that claim true"; every self-only/role check still runs
+  unconditionally against whatever ID gets claimed (see Open Questions on the actual security
+  gap this leaves). Added to `pto_agent` and `payroll_agent`'s tool lists (not the toolless
+  router, which stays intent-only); both instructions now expose `{caller_employee_id?}` and
+  tell the model to ask once per conversation, before any self-service/role-restricted tool,
+  and never re-ask once it's set.
+  Verified live via `adk web` (not just unit tests, since this is model behavior, not just
+  wiring): a PTO question with no identity got asked for an employee ID rather than guessing
+  or silently failing; after supplying E1002, `identify_caller` then `get_pto_balance` both
+  fired and the real balance came back; a follow-up asking about E1003 in the *same* session
+  reused the established identity (no re-ask) and correctly got `forbidden` -- proving the stub
+  grants exactly one identity per session, not blanket access.
+  Checked all 29 eval cases against this change: 28 already pre-seed `caller_employee_id` in
+  `session_input.state` (M6.1's original test-fixture pattern), so the new instruction rule
+  ("ask if empty") never fires for them -- unaffected. One adversarial case does not
+  (`adversarial_submit_pto_malformed_employee_id`, which tests a malformed *subject* ID being
+  rejected at the MCP schema layer): its expected trajectory now likely breaks, since the model
+  would ask for the caller's own ID before ever attempting `submit_pto_request`. Not fixed here
+  -- the eval gate only runs on manual `workflow_dispatch`, not CI, so this is a known
+  regression to catch and correct (either pre-seed that case's state too, or accept the new
+  behavior and update its expected trajectory) before the next real eval run, not a live
+  breakage today.
 
 ### Module 7
 - **M7.1 (Agent Engine deploy):** `adk deploy agent_engine --project=hr-ops-agent-509718
@@ -526,11 +556,15 @@ been cut; see git history for the blow-by-blow if needed.
 - The router's "unclear vs. a detail the specialist should resolve" distinction has needed two
   separate fixes already from unrelated features -- candidate for its own eval category rather
   than one-off fixes as they're found.
-- No production code sets `caller_employee_id` (no login flow) -- all five MCP tools
-  (including M6.2's `approve_payroll_run`) are correctly unreachable for a real user until
-  real auth exists; decide whether that's acceptable to ship as-is or needs a stub identity
-  source sooner. No live fixture exercises an authorized `get_payroll_run` or
-  `approve_payroll_run` call (payroll-role caller) end to end.
+- `identify_caller` (see M6 decisions) is a stub, not real auth -- anyone chatting with the
+  agent can claim any employee ID with zero verification, and today's self-only/role checks
+  would then correctly honor that claim as if it were true. Fine for a course/demo; would be a
+  real vulnerability if this ever shipped as *the* identity mechanism. Replacing it with a
+  verified login (SSO/OIDC) remains out of this course's syllabus, per the scope discussion
+  that led to building the stub -- revisit if this project is ever used beyond the course.
+  No live fixture exercises an authorized `get_payroll_run` or `approve_payroll_run` call
+  (payroll-role caller) end to end -- `identify_caller` only sets an ID, and no mock employee
+  in `mcp_server/mock_data.py` needs a specific *caller* role tested this way yet.
 - Eval suite is down to 29 cases and thinner on the "ambiguous" category after `find_employee`'s
   retirement; still no case exercising the one self-only scenario that matters most -- a caller
   asking about a *different*, valid employee ID and getting `forbidden` from the live agent
