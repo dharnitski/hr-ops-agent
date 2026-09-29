@@ -52,7 +52,7 @@ unchecked step.
 - [x] 2. Human-in-the-loop callbacks (PTO confirm, payroll manager approval)
 - [x] 3. Audit log of every tool call
 - [x] 4. Rate / blast-radius limits
-- [ ] 5. `docs/06-guardrail-standard.md`
+- [x] 5. `docs/06-guardrail-standard.md`
 
 ## Module 7 — Deploy to the cloud
 - [ ] 1. Deploy to Agent Engine (`adk deploy agent_engine`)
