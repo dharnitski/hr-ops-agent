@@ -63,7 +63,9 @@ unchecked step.
 - [ ] 5. CI/CD with eval gate, staging then prod
 - [ ] 6. Compare with Agent Starter Pack layout
 - [ ] 7. Tear down unused resources
-- [ ] 8. `docs/07-deployment-tradeoffs.md` (scoped to Agent Engine only)
+- [ ] 8. `docs/07-deployment-tradeoffs.md` (scoped to Agent Engine only) -- distinct from
+      `docs/07-deployment-procedure.md` (added 2026-09-29): that one's the how-to-redeploy
+      runbook; this one's still the why-Agent-Engine analysis, not yet written.
 
 ## Module 8 — Observability, cost, Staff-level artifacts
 - [ ] 1. OpenTelemetry traces to Cloud Trace
