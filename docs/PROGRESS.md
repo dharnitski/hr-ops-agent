@@ -56,13 +56,14 @@ unchecked step.
 
 ## Module 7 — Deploy to the cloud
 - [x] 1. Deploy to Agent Engine (`adk deploy agent_engine`)
-- [ ] 2. Deploy to Cloud Run (`adk deploy cloud_run`)
-- [ ] 3. Deploy to GKE (`adk deploy gke`)
+- [x] 2. ~~Deploy to Cloud Run (`adk deploy cloud_run`)~~ — skipped, staying on Agent Engine
+      only (2026-09-29 scope decision, see Decisions)
+- [x] 3. ~~Deploy to GKE (`adk deploy gke`)~~ — skipped, same decision
 - [ ] 4. Least-privilege service account, Secret Manager
 - [ ] 5. CI/CD with eval gate, staging then prod
 - [ ] 6. Compare with Agent Starter Pack layout
 - [ ] 7. Tear down unused resources
-- [ ] 8. `docs/07-deployment-tradeoffs.md`
+- [ ] 8. `docs/07-deployment-tradeoffs.md` (scoped to Agent Engine only)
 
 ## Module 8 — Observability, cost, Staff-level artifacts
 - [ ] 1. OpenTelemetry traces to Cloud Trace
@@ -380,6 +381,132 @@ been cut; see git history for the blow-by-blow if needed.
   `forbidden` back. Not a deploy problem -- a legitimate demonstration that M6.1's
   permission-boundary reasoning holds even on a cold deploy with no auth wired in, just not
   the exact failure mode originally expected to observe.
+- **7.2/7.3 skipped (2026-09-29):** user chose to stay on Agent Engine rather than also
+  deploying to Cloud Run and GKE. Downstream Module 7 items narrow accordingly: item 6's
+  Agent Starter Pack comparison and item 8's `docs/07-deployment-tradeoffs.md` now cover
+  Agent Engine only, not a cross-target comparison. This also forces a decision on HCM/MCP
+  reachability (open since M7.1) directly against Agent Engine, since there's no longer a
+  later Cloud Run step to defer it to.
+- **HCM reachability decision (2026-09-29):** deploy `mcp_server` itself to Cloud Run (private,
+  `--no-allow-unauthenticated`) as a supporting service -- the agent's own compute stays on
+  Agent Engine per the decision above; this doesn't reopen 7.2/7.3, since `mcp_server` was
+  already meant to be an independently-deployed shared service (M2 decision). In progress;
+  first piece done: `mcp_server/server.py`'s `main()` now reads `HOST`/`PORT` (Cloud Run
+  injects `PORT`; local default stays `127.0.0.1:8000`, unchanged) and an opt-in
+  `MCP_ALLOWED_HOSTS` that, when set, enables `TransportSecuritySettings` DNS-rebinding
+  Host-header validation -- this `mcp` version disables that protection entirely when no
+  `transport_security` is passed (verified hands-on: it's *not* a localhost-only default as
+  initially assumed), so leaving `MCP_ALLOWED_HOSTS` unset once deployed silently reproduces
+  today's unprotected posture rather than failing loud. Verified locally: wrong `Host` header
+  -> 421, correct one -> passes through to normal handling. Cloud Run IAM (who may call in) and
+  this setting (what Host header the server itself accepts) are separate, complementary
+  checks -- IAM alone doesn't need this, but it's a cheap second layer once public-network
+  bound.
+  Second finding, blocking containerization: `mcp_server/handlers.py` still imported mock
+  data from `hr_agent.mock_data` (a "Temporary" M2.3 debt that was never paid off -- flagged
+  in a comment, not tracked as an open question). Importing `hr_agent` at all runs its
+  `__init__.py` (`from . import agent`, required so ADK's agent loader finds `root_agent`),
+  which imports `hr_agent/agent.py` and, transitively, all of `google.adk` -- measured
+  hands-on: importing `mcp_server.handlers` pulled in 1383 modules, 222 of them
+  `google.adk.*`, before the fix. Contradicts M2's own "shared service, independent deploy"
+  design goal and would have meant shipping the full ADK/Vertex dependency tree into what
+  should be a small stateless container -- bigger image, slower cold start, and a server
+  that only starts today because `hr_agent/agent.py`'s module-level code happens not to need
+  network/credentials at import time (that's luck, not a guarantee).
+  Fixed at the root rather than patched around: mock data moved to `mcp_server/mock_data.py`
+  (the HCM tool boundary now owns HCM data), `mcp_server/handlers.py` imports it locally,
+  and `hr_agent/tools.py` (`list_holidays`) plus `scratch/react_from_scratch.py` import it
+  from `mcp_server.mock_data` instead -- dependency direction is agent-depends-on-server
+  mock data, never the reverse. Verified: importing `mcp_server.handlers` now pulls in 83
+  modules, zero `google.adk`, zero `hr_agent`; full unit suite (189 cases) and
+  lint/format/type-check still pass.
+  Containerized: `deploy/cloud_run/mcp_server.Dockerfile` (`python:3.14-slim`, matching
+  `requires-python`/`.python-version` -- Agent Engine's Python-3.11 pin from M7.1 doesn't
+  apply here, this container is fully self-controlled), installing only
+  `mcp_server/requirements.txt` (`mcp==2.2.0`, same pin as `hr_agent/requirements.txt`) via
+  `uv pip install --system`, not `uv sync`/`uv.lock` -- the whole point of the mock-data fix
+  above was that mcp_server must not pull in google-adk. `MCP_ALLOWED_HOSTS` deliberately not
+  baked into the image (depends on the Cloud Run URL, known only after first deploy).
+  Docker Desktop's daemon wasn't running in this environment, so the actual `docker build`
+  couldn't be exercised; verified the equivalent by hand instead -- a throwaway venv pinned to
+  Python 3.14 (matching the base image, not the host shell's default `python3` which turned
+  out to be 3.11 and hit the exact `typing.TypedDict`-needs-3.12+ class of bug M7.1 already
+  found once with Agent Engine, confirming the version pin matters), `pip install`ing only
+  `mcp_server/requirements.txt`, with only `mcp_server/` copied in (no `hr_agent` importable
+  at all). Confirmed clean start and correct Host-allowlist behavior (wrong host -> 421,
+  correct host -> normal protocol-level 400, not silently open) against a simulated Cloud Run
+  hostname. Re-verify the real `docker build` once Docker Desktop is available, before
+  trusting this over the manual reproduction.
+  Client-side ID-token auth implemented: `hr_agent/config.py` adds `HCM_MCP_AUDIENCE` (empty
+  default -- explicit opt-in, same pattern as `MCP_ALLOWED_HOSTS` on the server side, not an
+  inference from `HCM_MCP_URL`'s shape). `hr_agent/toolsets.py`'s `_caller_headers` attaches
+  `Authorization: Bearer <token>` via `google.oauth2.id_token.fetch_id_token` (ADC -- works
+  against Agent Engine's runtime service account with no extra wiring) only when the audience
+  is set; caller-identity header logic (M6.1) is unchanged and independent -- Cloud Run IAM
+  (can this caller reach the service at all) and the `x-caller-employee-id` header (which
+  employee is this, for `mcp_server`'s self-only checks) are separate concerns that happen to
+  share a header-injection function. Tokens cached in-process keyed by audience, refreshed
+  after 50 minutes (Google ID tokens run ~1h) rather than fetched per call. A non-`str`
+  return from `fetch_id_token` (it's an untyped API) raises `TypeError` rather than caching
+  or silently stringifying garbage.
+  New `tests/unit/hr_agent/test_toolsets.py` (6 cases, `fetch_id_token` mocked -- no
+  network/ADC): empty-audience/no-caller-id gives `{}`, caller-id-only path unchanged,
+  audience-configured path attaches the bearer token, cache reuse within TTL, cache refresh
+  past TTL, and the non-str-token rejection. `_caller_headers`/`toolsets.py` had no prior unit
+  coverage at all (a pre-existing gap from M6.1, not introduced here) -- this is the first.
+  195 unit tests pass; verified local-dev default (`HCM_MCP_AUDIENCE` unset) still returns
+  `{}` with no caller/audience, unchanged from before this change.
+  Deployed for real (2026-09-29), user approved: `run.googleapis.com`/`cloudbuild.googleapis.com`/
+  `artifactregistry.googleapis.com` enabled; Artifact Registry repo `hr-ops-agent`
+  (us-central1); image built via `gcloud builds submit --config=deploy/cloud_run/cloudbuild.yaml`
+  (Cloud Build, not local `docker build` -- Docker Desktop's daemon still wasn't running, and
+  this sidesteps that entirely, no local Docker needed for the real deploy either); deployed
+  private (`--no-allow-unauthenticated`) to Cloud Run as service `mcp-server` in us-central1 ->
+  `https://mcp-server-976559775904.us-central1.run.app`; `MCP_ALLOWED_HOSTS` updated to that
+  service's own hostname post-deploy (couldn't be known before the URL was assigned).
+  Found a second `--env_file` fact while wiring the redeploy, corrects the M7.1 note that
+  called it a no-op: read `cli_deploy.py` directly (adk 2.9.2) -- unlike `--staging_bucket`
+  (genuinely unused), `--env_file` still works when given an explicit path; only the *default*
+  (`agent_folder/.env`) is what M7.1 exercised. So `hr_agent/.env` stays localhost-only for
+  local dev, and a new `hr_agent/.env.agent_engine` (gitignored via the existing `.env.*`
+  pattern, mirrors `hr_agent/.env` but with the real `HCM_MCP_URL`/`HCM_MCP_AUDIENCE`) is
+  passed via `--env_file` for the Agent Engine deploy -- resolves the local-vs-deployed env
+  tension M7.1 punted on, rather than living with the accepted divergence.
+  IAM grant (`roles/run.invoker` for `service-976559775904@gcp-sa-aiplatform-re.
+  iam.gserviceaccount.com`, the reasoning engine's real effective identity, confirmed by
+  reading the live resource rather than assumed) run by the user after the classifier refused
+  it for me -- same class of gate as M7.1's deploy-command block, correctly not something to
+  route around.
+  Redeploy hit two more real bugs, both caught by checking actual results rather than trusting
+  a clean CLI exit:
+  1. First redeploy used `--env_file=hr_agent/.env.agent_engine` as a *relative* path. `adk
+     deploy`'s `to_agent_engine` calls `os.chdir(temp_folder_path)` before it checks
+     `os.path.exists(env_file)` -- the relative path silently resolved to nothing post-chdir,
+     `env_vars` stayed `{}`, and the deploy "succeeded" with **zero env vars set at all**
+     (confirmed via `GET .../reasoningEngines/...`: `deploymentSpec` was completely empty).
+     No warning, no error -- would have shipped silently broken. Fixed by passing an absolute
+     path; confirmed via the same GET that all five vars (including the real
+     `HCM_MCP_URL`/`HCM_MCP_AUDIENCE`) landed correctly the second time.
+  2. Second redeploy failed outright (`streamQuery` -> `FAILED_PRECONDITION`); Cloud Logging
+     (filtered to `resource.labels.reasoning_engine_id` + timestamp after the redeploy, per
+     M7.1's staleness lesson) showed `ModuleNotFoundError: No module named 'mcp_server'` from
+     `hr_agent/tools.py`'s `from mcp_server.mock_data import HOLIDAYS`. Root cause: the
+     mock-data-move fix (above) added a real cross-package dependency, but `adk deploy
+     agent_engine hr_agent` only packages the `hr_agent` folder itself -- invisible in every
+     local test because both packages sit on the same installed `PYTHONPATH` there. Fixed
+     with `--extra_packages=mcp_server`, which bundles it alongside `hr_agent` in the
+     deployed source tree; `server.py`/`handlers.py` ride along unused (harmless) since only
+     `mcp_server.mock_data` is ever imported by the agent side.
+  **Verified live end to end** via `:streamQuery` (not just "deploy succeeded"): a payroll-run
+  question routed to `payroll_agent`, called `get_payroll_run(run_id="PR-2026-09")` over the
+  real network, and got back `mcp_server`'s actual `forbidden` business-error response (M6.1's
+  role check) -- not a connection error, not a Cloud Run IAM rejection, a real round trip
+  through the Host-allowlist, the ID-token auth, and the server's own guardrail logic. A PTO
+  question similarly reached `get_pto_balance(employee_id="E1002")` and got the self-only
+  `forbidden` response. Both relayed in plain language by the agent. This resolves the M7.1
+  open item ("not yet confirmed... just deployed, not walked through") for real -- Module 6's
+  guardrails are now provably exercised against the live deployed agent, not just locally and
+  in integration tests.
 
 ## Open questions
 
@@ -424,12 +551,15 @@ been cut; see git history for the blow-by-blow if needed.
   `num_invocations_to_keep`. No audit-log-driven signal yet for what normal call volume or
   request size actually looks like (M6.3's audit log is the natural source once there's real
   traffic to look at).
-- M7.1's live Agent Engine instance is still running (idle time isn't billed per Vertex AI
-  pricing, but it's a real resource) -- tear it down along with the Cloud Run/GKE ones once
-  Module 7's deploy-target comparison (checklist item 6) is done, per checklist item 7.
-  Not yet confirmed via the playground that the deployed agent actually produces the expected
-  "router works, tool call fails with a connection error" behavior -- do that before treating
-  M7.1 as fully walked through, not just successfully deployed.
-- HCM reachability from a cloud-deployed agent (flagged as accepted-for-now in M7.1) needs a
-  real decision once Cloud Run comes up: either deploy `mcp_server` somewhere reachable, or
-  keep testing deploy targets with tools deliberately broken.
+- M7.1's live Agent Engine instance and the `mcp-server` Cloud Run service (plus its Artifact
+  Registry image) are all still running -- tear them all down once Module 7 wraps, per
+  checklist item 7. No GKE resources exist to also tear down (7.3 skipped). HCM reachability
+  itself is resolved (see the M7 decisions above: `mcp_server` on Cloud Run, IAM-gated,
+  verified live end to end) -- no longer open.
+- `hr_agent`'s deploy now has an undeclared assumption baked into a manual command
+  (`--extra_packages=mcp_server`, needed because `hr_agent/tools.py` imports
+  `mcp_server.mock_data`): nothing enforces that a future redeploy remembers this flag, or
+  that `--env_file` gets an absolute path -- both failed silently (empty env, then
+  `ModuleNotFoundError`) rather than erroring clearly. Worth a checklist item 5 (CI/CD)
+  concern: a real deploy pipeline should make both mistakes structurally impossible, not
+  rely on remembering this paragraph.
