@@ -106,7 +106,7 @@ async def approve_payroll_run(
         On success: {"status": "success", "run_id", "run_status": "approved", "approved_by",
         "replayed"}.
         On failure: {"status": "error", "code", "error"}; code is one of not_found,
-        invalid_state, idempotency_conflict, invalid_key, forbidden.
+        invalid_state, idempotency_conflict, invalid_key, forbidden, rate_limited.
     """
     return handlers.approve_payroll_run(
         run_id, idempotency_key, caller_employee_id=_caller_employee_id(ctx)
@@ -124,8 +124,10 @@ async def submit_pto_request(
 
     Self-service only: returns "forbidden" unless employee_id is the caller's own ID.
     Hours are computed by the server: 8h per weekday, excluding company holidays. Does not
-    reduce the balance. Safe to retry: repeating a call with the same idempotency_key and
-    same arguments returns the original request ("replayed": true) and creates nothing new.
+    reduce the balance. A single request may not exceed 160h (20 working days); split a
+    longer absence into multiple requests. Safe to retry: repeating a call with the same
+    idempotency_key and same arguments returns the original request ("replayed": true) and
+    creates nothing new.
 
     Args:
         employee_id: Employee ID such as "E1002".
@@ -138,8 +140,8 @@ async def submit_pto_request(
         On success: {"status": "success", "request_id", "employee_id", "start_date",
         "end_date", "hours", "request_status": "pending", "replayed"}.
         On failure: {"status": "error", "code", "error"}; code is one of not_found,
-        invalid_dates, insufficient_balance, no_working_days, idempotency_conflict,
-        invalid_key, forbidden.
+        invalid_dates, insufficient_balance, no_working_days, exceeds_limit,
+        idempotency_conflict, invalid_key, forbidden, rate_limited.
     """
     return handlers.submit_pto_request(
         employee_id,

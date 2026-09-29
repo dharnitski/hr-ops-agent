@@ -180,3 +180,12 @@ async def test_malformed_input_is_rejected_and_creates_nothing() -> None:
 async def test_unknown_argument_is_rejected() -> None:
     is_error, _ = await _call("get_employee", {"employee_id": "E1002", "salary": True})
     assert is_error
+
+
+async def test_submit_pto_over_blast_radius_limit_over_http() -> None:
+    # 2026-10-05 (Mon) to 2026-11-02 (Mon): 21 working days, one over the 20-day cap -- own
+    # caller bucket (E1001), separate from the E1002 calls elsewhere in this file.
+    args = _pto_args(employee_id="E1001", start_date="2026-10-05", end_date="2026-11-02")
+    is_error, result = await _call("submit_pto_request", args, caller_employee_id="E1001")
+    assert not is_error
+    assert result["result"]["code"] == "exceeds_limit"

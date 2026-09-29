@@ -49,6 +49,16 @@ def _reset_requests() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
+def _reset_rate_limits() -> Iterator[None]:
+    # Shared by submit_pto_request and approve_payroll_run (keyed by (caller, tool)); without
+    # this, the many same-caller calls across this file's other tests would eventually trip
+    # RATE_LIMIT_MAX_CALLS on their own.
+    handlers._write_call_times.clear()
+    yield
+    handlers._write_call_times.clear()
+
+
+@pytest.fixture(autouse=True)
 def _reset_payroll_state() -> Iterator[None]:
     # approve_payroll_run mutates PAYROLL_RUNS[...]["status"] in place (unlike
     # submit_pto_request, which never touches EMPLOYEES) -- restore it so approval tests don't
@@ -379,3 +389,82 @@ def test_approve_payroll_run_forbidden_checked_before_run_lookup() -> None:
     result = approve_payroll_run("PR-1999-01", "k1", caller_employee_id="E1002")
     assert result["status"] == "error"
     assert result["code"] == "forbidden"
+
+
+def test_submit_pto_at_exactly_the_limit_falls_through_to_balance_check() -> None:
+    # 2026-10-05 (Mon) to 2026-10-30 (Fri): exactly 20 working days, no holidays -- 160h,
+    # exactly MAX_REQUEST_HOURS. E1001's 96h balance is what actually fails it: proves the
+    # cap is "> MAX_REQUEST_HOURS", not ">=", so the boundary itself isn't rejected outright.
+    result = submit_pto_request(
+        "E1001", "2026-10-05", "2026-10-30", "k1", caller_employee_id="E1001"
+    )
+    assert result["status"] == "error"
+    assert result["code"] == "insufficient_balance"
+
+
+def test_submit_pto_over_the_limit_is_rejected_regardless_of_balance() -> None:
+    # One weekday over the 20-day cap (168h) -- rejected as exceeds_limit even though it would
+    # also fail insufficient_balance, proving the blast-radius cap is checked first.
+    result = submit_pto_request(
+        "E1001", "2026-10-05", "2026-11-02", "k1", caller_employee_id="E1001"
+    )
+    assert result["status"] == "error"
+    assert result["code"] == "exceeds_limit"
+    assert not handlers._pto_requests
+
+
+def test_submit_pto_rate_limited_after_max_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(handlers, "RATE_LIMIT_MAX_CALLS", 2)
+    ok1 = submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1", caller_employee_id="E1002")
+    ok2 = submit_pto_request("E1002", "2026-09-14", "2026-09-14", "k2", caller_employee_id="E1002")
+    limited = submit_pto_request(
+        "E1002", "2026-09-15", "2026-09-15", "k3", caller_employee_id="E1002"
+    )
+    assert ok1["status"] == "success"
+    assert ok2["status"] == "success"
+    assert limited["status"] == "error"
+    assert limited["code"] == "rate_limited"
+    assert "k3" not in handlers._pto_requests
+
+
+def test_submit_pto_rate_limit_is_per_caller(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(handlers, "RATE_LIMIT_MAX_CALLS", 1)
+    submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1", caller_employee_id="E1002")
+    limited = submit_pto_request(
+        "E1002", "2026-09-14", "2026-09-14", "k2", caller_employee_id="E1002"
+    )
+    other_caller = submit_pto_request(
+        "E1001", "2026-09-11", "2026-09-11", "k3", caller_employee_id="E1001"
+    )
+    assert limited["status"] == "error"
+    assert limited["code"] == "rate_limited"
+    assert other_caller["status"] == "success"
+
+
+def test_rate_limit_does_not_affect_read_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(handlers, "RATE_LIMIT_MAX_CALLS", 1)
+    submit_pto_request("E1002", "2026-09-11", "2026-09-11", "k1", caller_employee_id="E1002")
+    limited = submit_pto_request(
+        "E1002", "2026-09-14", "2026-09-14", "k2", caller_employee_id="E1002"
+    )
+    balance = get_pto_balance("E1002", caller_employee_id="E1002")
+    assert limited["status"] == "error"
+    assert limited["code"] == "rate_limited"
+    assert balance["status"] == "success"
+
+
+def test_approve_payroll_run_rate_limited_after_max_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(handlers, "RATE_LIMIT_MAX_CALLS", 1)
+    approve_payroll_run("PR-2026-09", "k1", caller_employee_id="E1004")
+    limited = approve_payroll_run("PR-2026-08", "k2", caller_employee_id="E1004")
+    assert limited["status"] == "error"
+    assert limited["code"] == "rate_limited"
+
+
+def test_rate_limit_buckets_are_per_tool_not_shared(monkeypatch: pytest.MonkeyPatch) -> None:
+    # E1004 (Finance Director) can also submit their own PTO -- exhausting their
+    # submit_pto_request bucket must not affect their separate approve_payroll_run bucket.
+    monkeypatch.setattr(handlers, "RATE_LIMIT_MAX_CALLS", 1)
+    submit_pto_request("E1004", "2026-09-11", "2026-09-11", "k1", caller_employee_id="E1004")
+    still_ok = approve_payroll_run("PR-2026-09", "k2", caller_employee_id="E1004")
+    assert still_ok["status"] == "success"

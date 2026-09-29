@@ -1,5 +1,6 @@
 """HCM tool handlers. Pure functions: no transport, so they test without a server."""
 
+import time
 from datetime import date, timedelta
 from typing import Annotated, Any, Literal, TypedDict
 
@@ -47,6 +48,8 @@ ErrorCode = Literal[
     "invalid_key",
     "invalid_state",
     "forbidden",
+    "rate_limited",
+    "exceeds_limit",
 ]
 
 
@@ -167,6 +170,14 @@ def get_pto_balance(
 HOURS_PER_DAY = 8.0
 LAST_WEEKDAY = 4  # Friday; date.weekday() is Monday=0.
 
+# Blast-radius limit (Module 6.4): the largest a single PTO request may be, regardless of
+# balance or confirmation -- 20 working days, so one call can't book more than about a month
+# even for an employee with a large balance. Complements RATE_LIMIT_* above, which bounds how
+# OFTEN a caller writes, not how much any one write can do. approve_payroll_run has no
+# equivalent: one call approves exactly one run, an already-bounded unit of work, so its
+# blast-radius protection is the role gate, confirmation, and rate limit alone.
+MAX_REQUEST_HOURS = 20 * HOURS_PER_DAY
+
 # In-memory stand-in for the HCM write path: idempotency_key -> (arguments, stored result).
 _pto_requests: dict[str, tuple[tuple[str, str, str], PtoRequestResult]] = {}
 
@@ -199,6 +210,38 @@ def _forbidden(employee_id: str) -> ErrorResult:
         "forbidden",
         f"Not authorized to access employee '{employee_id}'. You may only access your own record.",
     )
+
+
+# Rate limiting (Module 6.4): how OFTEN a caller may write, independent of whether any given
+# call succeeds. Blast-radius limits (MAX_REQUEST_HOURS below) are the complementary bound on
+# HOW MUCH a single call can do -- together they cap total damage even if identity (M6.1) and
+# confirmation (M6.2) both pass, e.g. a compromised or scripted caller that auto-confirms.
+#
+# In-memory stand-in for a real limiter (Cloud Armor, a token-bucket service) in production
+# (Module 7+): sliding window of recent call timestamps per (caller, tool). Every call attempt
+# counts, including one that fails later validation or is rejected for role/state reasons --
+# otherwise a caller could probe with malformed input for unlimited free attempts.
+_write_call_times: dict[tuple[str, str], list[float]] = {}
+
+RATE_LIMIT_WINDOW_SECONDS = 60.0
+RATE_LIMIT_MAX_CALLS = 20
+
+
+def _check_rate_limit(caller_id: str, tool_name: str) -> ErrorResult | None:
+    now = time.monotonic()
+    key = (caller_id, tool_name)
+    window_start = now - RATE_LIMIT_WINDOW_SECONDS
+    recent = [t for t in _write_call_times.get(key, []) if t > window_start]
+    if len(recent) >= RATE_LIMIT_MAX_CALLS:
+        _write_call_times[key] = recent
+        return _error(
+            "rate_limited",
+            f"Too many {tool_name} calls from this caller ({RATE_LIMIT_MAX_CALLS} per "
+            f"{int(RATE_LIMIT_WINDOW_SECONDS)}s). Wait and retry.",
+        )
+    recent.append(now)
+    _write_call_times[key] = recent
+    return None
 
 
 # Titles authorized to read payroll run summaries. Role, not identity: unlike
@@ -263,11 +306,11 @@ _payroll_approvals: dict[str, tuple[str, PayrollApprovalResult]] = {}
 def _check_approver_and_key(
     caller_employee_id: str | None, idempotency_key: str
 ) -> str | ErrorResult:
-    """Role and key-format checks that must run before the idempotency store or any run
-    lookup is touched -- merged into one helper only to keep approve_payroll_run's
+    """Role, key-format, and rate-limit checks that must run before the idempotency store or
+    any run lookup is touched -- merged into one helper only to keep approve_payroll_run's
     return-statement count under the linter's limit, same as submit_pto_request's
     _check_caller_and_key. Returns the stripped key on success, or an error dict."""
-    _, caller = _lookup(caller_employee_id or "")
+    normalized_caller, caller = _lookup(caller_employee_id or "")
     if caller is None or caller["title"] not in PAYROLL_APPROVER_TITLES:
         return _error(
             "forbidden",
@@ -276,6 +319,9 @@ def _check_approver_and_key(
     key = idempotency_key.strip()
     if not key:
         return _error("invalid_key", "idempotency_key must be a non-empty string.")
+    rate_limit_error = _check_rate_limit(normalized_caller, "approve_payroll_run")
+    if rate_limit_error is not None:
+        return rate_limit_error
     return key
 
 
@@ -302,7 +348,7 @@ def approve_payroll_run(
         On success: {"status": "success", "run_id", "run_status": "approved", "approved_by",
         "replayed"}.
         On failure: {"status": "error", "code", "error"}; code is one of not_found,
-        invalid_state, idempotency_conflict, invalid_key, forbidden.
+        invalid_state, idempotency_conflict, invalid_key, forbidden, rate_limited.
     """
     checked = _check_approver_and_key(caller_employee_id, idempotency_key)
     if not isinstance(checked, str):
@@ -366,6 +412,12 @@ def _check_request(
     hours = _working_hours(start, end)
     if hours == 0:
         return _error("no_working_days", "The range contains only weekends and holidays.")
+    if hours > MAX_REQUEST_HOURS:
+        return _error(
+            "exceeds_limit",
+            f"A single request may not exceed {MAX_REQUEST_HOURS:g}h; this one needs "
+            f"{hours:g}h. Split it into smaller requests.",
+        )
     if hours > employee["pto_hours"]:
         return _error(
             "insufficient_balance",
@@ -377,12 +429,13 @@ def _check_request(
 def _check_caller_and_key(
     employee_id: str, caller_employee_id: str | None, idempotency_key: str
 ) -> str | ErrorResult:
-    """Caller-identity and key-format checks that must run before the idempotency store or
-    any lookup is touched. Returns the stripped key on success, or an error dict.
+    """Caller-identity, key-format, and rate-limit checks that must run before the idempotency
+    store or any lookup is touched. Returns the stripped key on success, or an error dict.
 
-    Merged into one helper (instead of two guard clauses in submit_pto_request) only to keep
-    that function's return-statement count under the linter's limit; the checks themselves are
-    unrelated (identity vs. syntactic key validity) and would be separate ifs either way.
+    Merged into one helper (instead of separate guard clauses in submit_pto_request) only to
+    keep that function's return-statement count under the linter's limit; the checks
+    themselves are unrelated (identity vs. syntactic key validity vs. call volume) and would
+    be separate ifs either way.
     """
     normalized_caller = _normalize_id(caller_employee_id or "")
     normalized_id = _normalize_id(employee_id)
@@ -391,6 +444,9 @@ def _check_caller_and_key(
     key = idempotency_key.strip()
     if not key:
         return _error("invalid_key", "idempotency_key must be a non-empty string.")
+    rate_limit_error = _check_rate_limit(normalized_caller, "submit_pto_request")
+    if rate_limit_error is not None:
+        return rate_limit_error
     return key
 
 
@@ -410,8 +466,10 @@ def submit_pto_request(
     6.2, not this check).
 
     Hours are computed by the server: 8h per weekday, excluding company holidays. Does not
-    reduce the balance. Safe to retry: repeating a call with the same idempotency_key and
-    same arguments returns the original request ("replayed": true) and creates nothing new.
+    reduce the balance. A single request may not exceed 160h (20 working days); split a
+    longer absence into multiple requests. Safe to retry: repeating a call with the same
+    idempotency_key and same arguments returns the original request ("replayed": true) and
+    creates nothing new.
 
     Args:
         employee_id: Employee ID such as "E1002".
@@ -426,8 +484,8 @@ def submit_pto_request(
         On success: {"status": "success", "request_id", "employee_id", "start_date",
         "end_date", "hours", "request_status": "pending", "replayed"}.
         On failure: {"status": "error", "code", "error"}; code is one of not_found,
-        invalid_dates, insufficient_balance, no_working_days, idempotency_conflict,
-        invalid_key, forbidden.
+        invalid_dates, insufficient_balance, no_working_days, exceeds_limit,
+        idempotency_conflict, invalid_key, forbidden, rate_limited.
     """
     precheck = _check_caller_and_key(employee_id, caller_employee_id, idempotency_key)
     if not isinstance(precheck, str):

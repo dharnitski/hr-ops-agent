@@ -51,7 +51,7 @@ unchecked step.
 - [x] 1. Permission boundaries in tool/MCP layer (act as requesting user)
 - [x] 2. Human-in-the-loop callbacks (PTO confirm, payroll manager approval)
 - [x] 3. Audit log of every tool call
-- [ ] 4. Rate / blast-radius limits
+- [x] 4. Rate / blast-radius limits
 - [ ] 5. `docs/06-guardrail-standard.md`
 
 ## Module 7 — Deploy to the cloud
@@ -296,6 +296,36 @@ been cut; see git history for the blow-by-blow if needed.
   (`tests/integration/hr_agent/test_audit_log_live.py`) against the real MCP server, confirming
   the hand-fabricated MCP wire shape in the unit tests matches a real `MCPTool.run_async`
   result and that the real `pto_hours` figure does not reach the log.
+- **M6.4 (rate / blast-radius limits):** two independent, complementary bounds, both in
+  `mcp_server/handlers.py` since the server is the hard boundary (tool/MCP layer, per M1's
+  pattern rule) -- neither depends on the model or the confirmation step behaving correctly.
+  **Rate limiting** (`_check_rate_limit`): an in-memory sliding window of call timestamps
+  keyed by `(caller_id, tool_name)`, 20 calls per 60s, folded into `_check_caller_and_key`/
+  `_check_approver_and_key` so it runs on every call attempt -- including one that fails
+  later validation -- before the idempotency store or any lookup; an exact-replay call still
+  consumes a slot (simpler than special-casing it, and arguably correct: a flood of replays is
+  still a flood). Per-tool, not shared across `submit_pto_request` and `approve_payroll_run`,
+  so exhausting one doesn't block the other. **Blast radius** (`MAX_REQUEST_HOURS`): a single
+  `submit_pto_request` may not exceed 160h (20 working days) regardless of balance or
+  confirmation, checked in `_check_request` before the balance check so it fires even for a
+  request that would also fail on balance. `approve_payroll_run` has no equivalent cap -- one
+  call approves exactly one already-bounded run, so its blast-radius protection is the role
+  gate, confirmation, and rate limit alone (no continuous "how much" dimension to cap, unlike
+  PTO's hours).
+  New error codes (`rate_limited`, `exceeds_limit`) are plain `{"status": "error", "code":
+  ...}` results -- no new agent instruction rule needed, since the existing generic "tell the
+  user plainly what went wrong" rule (M1) already covers them, same as `insufficient_balance`
+  or `invalid_state`. Only `submit_pto_request` and `approve_payroll_run` needed new module-
+  level reset fixtures for `_write_call_times`, mirroring the existing `_pto_requests`/
+  `_payroll_approvals` pattern -- required because the counter is process-lifetime state and
+  the existing test suite reuses the same caller IDs across dozens of test functions. Chose 20
+  calls/60s specifically so it comfortably clears the live HTTP integration suite's real call
+  volume against a single session-scoped server subprocess (same class of shared-state
+  friction M5's eval gate hit) without weakening the limit to the point of being decorative;
+  the unit-level rate-limit tests use `monkeypatch` on `RATE_LIMIT_MAX_CALLS` instead of making
+  20 real calls. No live agent-level test added for either limit: both are plain business-error
+  results the agent already knows how to relay, unlike M6.2's confirmation pause, which needed
+  its own mechanism-level proof.
 
 ## Open questions
 
@@ -332,3 +362,11 @@ been cut; see git history for the blow-by-blow if needed.
 - `approve_payroll_run` (M6.2) has no eval case; adding one needs an `adk eval` case that
   models the confirmation pause and resume, which no existing case does -- work out that
   pattern before the eval suite claims payroll approval is covered.
+- M6.4's rate limiter is a single process's in-memory dict -- fine for one `mcp_server`
+  instance, but doesn't survive a restart and won't be shared across replicas once Module 7
+  deploys more than one. Revisit with a real backing store (Redis, Cloud Armor) at that point.
+- M6.4's thresholds (20 calls/60s, 160h/request) are engineering judgment calls, not measured
+  against real usage -- same unmeasured-floor caveat as M5's eval thresholds and M4.3's
+  `num_invocations_to_keep`. No audit-log-driven signal yet for what normal call volume or
+  request size actually looks like (M6.3's audit log is the natural source once there's real
+  traffic to look at).

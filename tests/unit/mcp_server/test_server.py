@@ -28,8 +28,10 @@ TOOLS = {
 @pytest.fixture(autouse=True)
 def _reset_requests() -> Iterator[None]:
     handlers._pto_requests.clear()
+    handlers._write_call_times.clear()
     yield
     handlers._pto_requests.clear()
+    handlers._write_call_times.clear()
 
 
 def _ctx_for(caller_employee_id: str) -> Context:

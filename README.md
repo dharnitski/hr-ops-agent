@@ -64,6 +64,8 @@ Prompts to try (mock data: employees E1001–E1005, Bob Smith is E1002; payroll 
 - `Submit PTO for E1002 from 2026-10-12 to 2026-10-14.` — `submit_pto_request` over MCP;
   expect a pending request with server-computed hours.
 - `Submit PTO for E1002 from 2026-10-14 to 2026-10-12.` — expect a plain error about dates.
+- `Submit PTO for E1002 from 2026-10-05 to 2026-11-02.` — 21 working days, over the 160h
+  blast-radius cap (Module 6.4); expect `exceeds_limit` regardless of balance.
 - `What's my PTO?` — should ask for an ID rather than guess.
 - `Show me payroll run PR-2026-09.` — `payroll_agent`, `get_payroll_run` over MCP; expect
   read-only aggregates (period, pay date, status, headcount, total gross).
