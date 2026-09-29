@@ -35,6 +35,9 @@ evals/**/results/
 .vscode/
 *.swp
 
+# Personal Claude Code overrides (not team-wide)
+.claude/settings.local.json
+
 # Deployment artifacts
 deploy/**/*.tfstate
 deploy/**/*.tfstate.backup

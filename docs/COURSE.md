@@ -58,10 +58,19 @@ this stack moves fast and these notes will drift.
   ADK CLI deploy commands are unchanged in shape; expect doc URLs and some console labels
   to say "Gemini Enterprise" instead of "Vertex AI". Module 7 deliverable should use current
   terminology but it's fine to keep saying "Agent Engine" for the compute product.
-- **Agent Engine deployment confirmed as planned:** `adk deploy agent_engine
-  --project=$PROJECT_ID --region=$LOCATION_ID`, `adk deploy cloud_run ...`, `adk deploy gke
-  ...`. Agent Engine deploys need a GCS staging bucket. Some deploy args can load from the
-  agent's `.env`.
+- **Agent Engine deployment confirmed hands-on 2026-09-28 (adk 2.9.2), corrects the note
+  above:** `--staging_bucket` (and `--requirements_file`/`--env_file`/`--adk_app`/several
+  others) are now deprecated/no-op — `adk deploy agent_engine --project=$PROJECT_ID
+  --region=$LOCATION_ID my_agent` auto-detects dependencies and reads `.env` on its own, no
+  GCS bucket needed. `--region` must be a real region (e.g. `us-central1`); the `.env`'s
+  `GOOGLE_CLOUD_LOCATION=global` (correct for Gemini 3.x model serving) does not apply here
+  and is ignored once `--region` is passed explicitly.
+  **Gotcha:** the deploy API now rejects any `.env` variable with an empty value
+  (`Required field is not set` on `deployment_spec.env[n].value`) — a `KEY=` line that used
+  to just do nothing locally hard-fails a cloud deploy. Audit `.env` for empty values before
+  deploying; this project had two dead ones (`HCM_API_BASE_URL`/`HCM_API_KEY`, unused
+  placeholders from before mock data replaced a real HCM integration) that had to be deleted.
+  `adk deploy cloud_run ...`/`adk deploy gke ...` not yet re-verified against current docs.
 - **Memory Bank still current** for Module 4 long-term memory, now documented as "Agent
   Platform Memory Bank"; ADK auto-orchestrates store/retrieve calls against it when
   configured with `VertexAiMemoryBankService` (name subject to the same 2.x import-path

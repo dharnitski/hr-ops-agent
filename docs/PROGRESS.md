@@ -55,7 +55,7 @@ unchecked step.
 - [x] 5. `docs/06-guardrail-standard.md`
 
 ## Module 7 — Deploy to the cloud
-- [ ] 1. Deploy to Agent Engine (`adk deploy agent_engine`)
+- [x] 1. Deploy to Agent Engine (`adk deploy agent_engine`)
 - [ ] 2. Deploy to Cloud Run (`adk deploy cloud_run`)
 - [ ] 3. Deploy to GKE (`adk deploy gke`)
 - [ ] 4. Least-privilege service account, Secret Manager
@@ -327,6 +327,26 @@ been cut; see git history for the blow-by-blow if needed.
   results the agent already knows how to relay, unlike M6.2's confirmation pause, which needed
   its own mechanism-level proof.
 
+### Module 7
+- **M7.1 (Agent Engine deploy):** `adk deploy agent_engine --project=hr-ops-agent-509718
+  --region=us-central1 --display_name="hr-ops-agent (Module 7.1)" hr_agent`, run 2026-09-28.
+  Live resource: `projects/976559775904/locations/us-central1/reasoningEngines/
+  3717518632499019776`. API drift vs. `docs/COURSE.md`'s original notes and the fix required
+  are logged there (staging bucket no longer needed; empty `.env` values now hard-fail the
+  deploy -- `HCM_API_BASE_URL`/`HCM_API_KEY`, two dead placeholders from before mock data
+  replaced a real HCM integration, were deleted from `hr_agent/.env` and `.env.example`).
+  Scope decision made before deploying, not after: `HCM_MCP_URL` still points at
+  `localhost:8000`, unreachable from the cloud, so every tool call on the deployed agent
+  fails with a connection error -- accepted deliberately for this step, which is about
+  proving the deploy mechanics (auth, packaging, IAM) work, not about a working end-to-end
+  agent yet. Revisit MCP reachability as its own decision when it actually blocks a later
+  step (e.g. Cloud Run).
+  The auto mode classifier blocks both `adk deploy` commands (flagged "Production Deploy")
+  and writes to `.claude/settings.local.json` (flagged "Self-Modification") -- granting a
+  Bash permission for cloud deploys has to be a manual action the user takes themselves; the
+  user added `.claude/settings.local.json` (gitignored, machine-local, not `settings.json`)
+  with `"Bash(adk deploy *)"`/`"Bash(uv run adk deploy *)"` allow rules.
+
 ## Open questions
 
 - Model IDs drift fast (Gemini 2.5 retires 2026-10-20 mid-course) -- reconfirm exact Gemini
@@ -370,3 +390,12 @@ been cut; see git history for the blow-by-blow if needed.
   `num_invocations_to_keep`. No audit-log-driven signal yet for what normal call volume or
   request size actually looks like (M6.3's audit log is the natural source once there's real
   traffic to look at).
+- M7.1's live Agent Engine instance is still running (idle time isn't billed per Vertex AI
+  pricing, but it's a real resource) -- tear it down along with the Cloud Run/GKE ones once
+  Module 7's deploy-target comparison (checklist item 6) is done, per checklist item 7.
+  Not yet confirmed via the playground that the deployed agent actually produces the expected
+  "router works, tool call fails with a connection error" behavior -- do that before treating
+  M7.1 as fully walked through, not just successfully deployed.
+- HCM reachability from a cloud-deployed agent (flagged as accepted-for-now in M7.1) needs a
+  real decision once Cloud Run comes up: either deploy `mcp_server` somewhere reachable, or
+  keep testing deploy targets with tools deliberately broken.
