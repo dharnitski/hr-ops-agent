@@ -2,7 +2,6 @@ from collections.abc import Iterator
 
 import pytest
 
-from hr_agent.mock_data import PAYROLL_RUNS
 from mcp_server import handlers
 from mcp_server.handlers import (
     approve_payroll_run,
@@ -11,6 +10,7 @@ from mcp_server.handlers import (
     get_pto_balance,
     submit_pto_request,
 )
+from mcp_server.mock_data import PAYROLL_RUNS
 
 
 def test_get_employee_success() -> None:

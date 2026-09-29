@@ -17,7 +17,7 @@ from google.genai import types
 
 from hr_agent import tools as hr_tools
 from hr_agent.config import DEFAULT_MODEL_ID
-from hr_agent.mock_data import EMPLOYEES
+from mcp_server.mock_data import EMPLOYEES
 
 load_dotenv(Path(__file__).parent.parent / "hr_agent" / ".env")
 

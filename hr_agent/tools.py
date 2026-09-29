@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from .mock_data import HOLIDAYS
+from mcp_server.mock_data import HOLIDAYS
 
 # Session state key: the employee ID the conversation is currently about. Set by any tool
 # that resolves or confirms one; read by agent instructions via `{current_employee_id?}`.

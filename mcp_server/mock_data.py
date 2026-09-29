@@ -1,4 +1,7 @@
-"""Mock HCM data. Stands in for a real HCM system; replaced by the MCP server in Module 2."""
+"""Mock HCM data. Stands in for a real HCM system. Owned by mcp_server (the HCM tool
+boundary) so the server has no import-time dependency on hr_agent; hr_agent imports this
+module for the one local tool (list_holidays) that still needs it.
+"""
 
 from typing import Any
 

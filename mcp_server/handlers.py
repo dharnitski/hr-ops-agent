@@ -6,9 +6,7 @@ from typing import Annotated, Any, Literal, TypedDict
 
 from pydantic import Field
 
-# Temporary: reuses the agent's mock data. M2.3 moves the data into mcp_server/ and removes
-# the agent's local tools; the agent must reach the server only over MCP.
-from hr_agent.mock_data import EMPLOYEES, HOLIDAYS, PAYROLL_RUNS
+from mcp_server.mock_data import EMPLOYEES, HOLIDAYS, PAYROLL_RUNS
 
 # Wire contract: Field constraints are enforced by the MCP layer before a handler runs, so
 # malformed input is rejected at the boundary. Handlers still normalize and validate
