@@ -195,7 +195,13 @@ been cut; see git history for the blow-by-blow if needed.
   mocks): a first session asks about E1002, a second session recalls it via `load_memory`
   without being told again, and `get_pto_balance` returns the real balance -- same scenario as
   `test_memory_live.py`'s stub version, now proven against the actual Module 7 deployment
-  target. `vertexai.Client` emits a `FutureWarning` (deprecated in favor of
+  target. `adk eval` can't serve as the live-memory guardrail: `LocalEvalService` takes a
+  `memory_service`, but the CLI never passes one and `EvaluationGenerator` falls back to
+  `InMemoryMemoryService()` (no flag or env override, adk 2.9.2), so an evalset case would
+  silently test the stub. `test_memory_bank_live.py` is the guardrail (on-demand, billed);
+  driving `LocalEvalService` directly was considered and declined as a second, ADK-internals-
+  coupled eval mechanism outside `scripts/run_eval_gate.py`.
+  `vertexai.Client` emits a `FutureWarning` (deprecated in favor of
   `agentplatform.Client`) on this SDK version -- noted, not acted on (filterwarnings in
   `pyproject.toml` only suppresses warnings already known to be noise; this one's new).
 - Context growth: `ContextFilterPlugin` (`before_model_callback`, drops whole old invocations
