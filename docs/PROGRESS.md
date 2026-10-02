@@ -640,6 +640,19 @@ been cut; see git history for the blow-by-blow if needed.
   real credential (e.g. a non-GCP API key) is ever added.
   New gotcha for `docs/COURSE.md`: `--env_file` now prints a deprecation warning on this adk
   version but still functions -- noted there rather than assuming it's about to break.
+- **Redeploy for the M4.2 memory fix (2026-10-02):** the live reasoning engine (`updateTime`
+  2026-10-01 21:28 local) predated `_persist_to_memory`'s real-Memory-Bank fix in
+  `hr_agent/agents/pto.py` (committed 22:48 the same night), so deployed cross-session
+  recall still ran the old, extraction-dropped fact shape. Redeployed in place with the
+  runbook command (`docs/07-deployment-procedure.md`); no new resources, IAM unchanged.
+  Verified per the runbook, not by exit code: `updateTime` advanced, `effectiveIdentity` still
+  `hr-agent-runtime`, all five env vars present with none empty, and a fresh two-turn
+  `:streamQuery` session fired `identify_caller` then `get_pto_balance` (64.5h PTO / 24.0h
+  sick for E1002) through `mcp-server`. `test_memory_bank_live.py` also passes against the
+  same resource, but it drives the local `hr_agent` code, so the *deployed* agent's memory
+  write/recall path is covered by inference (same code, same resource), not a direct test.
+  Gotcha for ad hoc verification scripts: under zsh, `$BASE:query` expands as a `:q`
+  modifier, not `$BASE` + `:query` -- use `${BASE}:query`/`${BASE}:streamQuery`.
 
 ## Open questions
 
