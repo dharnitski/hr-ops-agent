@@ -8,8 +8,9 @@ project `hr-ops-agent-509718`, region `us-central1`:
 | Resource | ID / URL |
 |---|---|
 | Agent Engine (the agent) | `reasoningEngines/3717518632499019776` |
-| Cloud Run service (`mcp_server`) | `mcp-server` → `https://mcp-server-976559775904.us-central1.run.app` |
+| Cloud Run service (`mcp_server`) | `mcp-server` → `https://mcp-server-976559775904.us-central1.run.app` (also reachable at the older-style `https://mcp-server-rqllted7qq-uc.a.run.app`, which `gcloud run services describe` and the console show; same service. `MCP_ALLOWED_HOSTS` is set to the first form only, so use that one in `HCM_MCP_URL`) |
 | Artifact Registry repo | `hr-ops-agent` (Docker, us-central1) |
+| Memory Bank | The Agent Engine resource above; nothing separate to provision. The deployed agent uses it automatically; `MEMORY_BANK_AGENT_ENGINE_ID` in `.env` is only for `tests/integration/hr_agent/test_memory_bank_live.py` |
 | Agent Engine runtime identity | `hr-agent-runtime@hr-ops-agent-509718.iam.gserviceaccount.com` (custom, `roles/aiplatform.user` only — see `docs/PROGRESS.md`'s M7.4) |
 
 ## One-time setup (already done; here for a fresh project)
