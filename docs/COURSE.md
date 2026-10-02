@@ -106,10 +106,16 @@ this stack moves fast and these notes will drift.
   Please leave it unspecified` on this version but still works when passed — the deprecation
   warning is new since the M7.1 notes above were written; `--env_file` itself is not yet
   actually removed.
-- **Memory Bank still current** for Module 4 long-term memory, now documented as "Agent
-  Platform Memory Bank"; ADK auto-orchestrates store/retrieve calls against it when
-  configured with `VertexAiMemoryBankService` (name subject to the same 2.x import-path
-  churn — recheck at Module 4).
+- **Memory Bank, confirmed at Module 4 (2026-10-01):** `VertexAiMemoryBankService(project=,
+  location=, agent_engine_id=)` — the `agent_engine_id` is an existing Agent Runtime
+  (reasoning engine) resource ID; per ADK docs, "you do not need to deploy your agent to
+  Agent Runtime to use Memory Bank," but creating one is still the only way to get the ID.
+  Correction to an earlier open question in `docs/PROGRESS.md`: this project already has one
+  from M7.1 (`3717518632499019776`) — no separate resource to create, just point the service
+  at it. Local CLI smoke-testing against a live bank: `adk web hr_agent
+  --memory_service_uri="agentengine://<id>"`. Pricing (checked 2026-10-01): $0.30/GiB-month
+  storage (1 GiB free), $0.085 per 3M read ops, $0.085 per 1M write ops — negligible at this
+  project's test volume, but it's a real billed call each time, unlike `InMemoryMemoryService`.
 
 None of the above changes the module structure or learning goals below; it changes which
 symbols/model IDs/URLs to type. Adjustments are folded into the relevant steps below where

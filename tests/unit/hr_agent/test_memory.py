@@ -1,7 +1,8 @@
 """M4.2: long-term memory. Verifies the write path (_persist_to_memory) and ADK's own
-InMemoryMemoryService contract, with no model call and no live GCP service -- swapping in
-VertexAiMemoryBankService later (Module 7) changes only the CLI's --memory_service_uri flag,
-not this code (see docs/PROGRESS.md M4.2)."""
+InMemoryMemoryService contract, with no model call and no live GCP service. Swapping in
+VertexAiMemoryBankService (tests/integration/hr_agent/test_memory_bank_live.py) is a CLI
+flag / memory_service wiring change, but _persist_to_memory's fact *content* also had to
+change for it to round-trip for real -- see its docstring and docs/PROGRESS.md M4.2."""
 
 from google.adk.agents import Agent, Context
 from google.adk.agents.invocation_context import InvocationContext

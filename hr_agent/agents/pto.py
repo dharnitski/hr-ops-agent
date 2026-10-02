@@ -113,15 +113,25 @@ async def _persist_to_memory(callback_context: Context) -> None:
     but InMemoryMemoryService doesn't implement it -- only VertexAiMemoryBankService does -- so
     it isn't usable until Module 7's real resource exists. Nothing to persist if no employee was
     resolved this turn (e.g. a holidays-only question).
+
+    The fact is framed as role="user" with an explicit "remember" cue, not as an agent-authored
+    note -- confirmed live against the real VertexAiMemoryBankService (not just the stub):
+    its extraction model silently drops a role="model" note or a plain informational statement
+    (e.g. "this user asked about employee X", or even a role="user" statement without a
+    remember cue) -- zero memories, no error -- and only keeps something phrased as the user
+    explicitly asking to remember a fact about themselves. InMemoryMemoryService stores
+    whatever it's given verbatim regardless of role, so this is still safe for local dev/tests.
     """
     employee_id = callback_context.state.get(CURRENT_EMPLOYEE_ID_KEY)
     if not employee_id:
         return
     fact = Event(
-        author="pto_agent",
+        author="user",
         content=types.Content(
-            role="model",
-            parts=[types.Part(text=f"Earlier, this user asked about employee {employee_id}.")],
+            role="user",
+            parts=[
+                types.Part(text=f"Remember that I previously asked about employee {employee_id}.")
+            ],
         ),
     )
     await callback_context.add_events_to_memory(events=[fact])

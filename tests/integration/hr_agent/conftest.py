@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
-from google.adk.runners import InMemoryRunner
+from google.adk.runners import InMemoryRunner, Runner
 from google.genai import types
 
 from hr_agent.agent import root_agent
@@ -32,10 +32,15 @@ def require_gcp() -> None:
         pytest.skip("GOOGLE_CLOUD_PROJECT not set (see hr_agent/.env)")
 
 
-async def _run_turn(runner: InMemoryRunner, session_id: str, prompt: str) -> Turn:
+async def run_turn(runner: Runner, session_id: str, prompt: str, *, user_id: str = "u1") -> Turn:
+    """Shared by this module's fixtures and test_memory_bank_live.py, which builds its own
+    Runner (VertexAiMemoryBankService instead of InMemoryRunner's default memory service) and
+    its own user_id -- must match whatever create_session used, or the lookup 404s."""
     turn = Turn()
     message = types.Content(role="user", parts=[types.Part(text=prompt)])
-    async for event in runner.run_async(user_id="u1", session_id=session_id, new_message=message):
+    async for event in runner.run_async(
+        user_id=user_id, session_id=session_id, new_message=message
+    ):
         for call in event.get_function_calls():
             if call.name == "transfer_to_agent":
                 turn.transfers.append(str((call.args or {}).get("agent_name")))
@@ -61,7 +66,7 @@ def ask() -> Callable[[str], Awaitable[Turn]]:
             user_id="u1",
             state={CALLER_EMPLOYEE_ID_STATE_KEY: _DEFAULT_CALLER_EMPLOYEE_ID},
         )
-        return await _run_turn(runner, session.id, prompt)
+        return await run_turn(runner, session.id, prompt)
 
     return _ask
 
@@ -82,7 +87,7 @@ def conversation() -> Callable[[], Awaitable[Callable[[str], Awaitable[Turn]]]]:
         )
 
         async def _turn(prompt: str) -> Turn:
-            return await _run_turn(runner, session.id, prompt)
+            return await run_turn(runner, session.id, prompt)
 
         return _turn
 
@@ -108,7 +113,7 @@ def sessions() -> Callable[[], Awaitable[Callable[[str], Awaitable[Turn]]]]:
         )
 
         async def _turn(prompt: str) -> Turn:
-            return await _run_turn(runner, session.id, prompt)
+            return await run_turn(runner, session.id, prompt)
 
         return _turn
 

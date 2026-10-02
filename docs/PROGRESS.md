@@ -34,8 +34,9 @@ unchecked step.
 
 ## Module 4 — Memory, state, context engineering
 - [x] 1. Session state (current employee, pending actions)
-- [ ] 2. Long-term memory (Agent Platform Memory Bank on Agent Engine) -- interface/local stub
-      done (`InMemoryMemoryService`); live Agent Engine resource deferred to Module 7 by choice
+- [x] 2. Long-term memory (Agent Platform Memory Bank on Agent Engine) -- interface/local stub
+      (`InMemoryMemoryService`) plus live verification against the real M7.1 Agent Engine
+      resource (`VertexAiMemoryBankService`), both passing end to end (2026-10-01)
 - [x] 3. Trimming/summarizing tool output
 - [x] 4. Sensitive data kept out of context unless needed
 
@@ -145,17 +146,58 @@ been cut; see git history for the blow-by-blow if needed.
   purely observational. Both keys are prompt-templated (`{current_employee_id?}`); reuse is a
   prompt rule, not enforced (see Open questions).
 - Long-term memory: `BaseMemoryService` (`add_session_to_memory`/`search_memory`, scoped by
-  `(app_name, user_id)`) is what both `InMemoryMemoryService` (in-process stub, used today) and
-  `VertexAiMemoryBankService` (real resource, Module 7) implement -- swapping is a CLI flag on
-  `adk web`/`adk run`, zero `hr_agent/` code change. Read side uses `load_memory` (an
-  auditable, model-invoked tool call) over `preload_memory` (silent injection), matching M2's
-  data-minimization stance. Memory is reference-only, never identity: a recalled ID may be
-  used directly for a read, but never for a write (`submit_pto_request`) without re-resolving
-  the employee this session -- prompt rule only, not enforced.
+  `(app_name, user_id)`) is what both `InMemoryMemoryService` (in-process stub) and
+  `VertexAiMemoryBankService` (real resource) implement -- swapping is a CLI flag on
+  `adk web`/`adk run` / the `Runner`'s `memory_service`, zero `hr_agent/` *wiring* change. Read
+  side uses `load_memory` (an auditable, model-invoked tool call) over `preload_memory` (silent
+  injection), matching M2's data-minimization stance. Memory is reference-only, never identity:
+  a recalled ID may be used directly for a read, but never for a write (`submit_pto_request`)
+  without re-resolving the employee this session -- prompt rule only, not enforced.
 - `_persist_to_memory` writes one synthetic fact per turn ("this user asked about employee X"),
   not the raw conversation -- avoids storing exact PTO dates/hours/balances indefinitely in a
   durable, cross-session-searchable store. `Context.add_memory` would be the cleaner direct
-  write but isn't implemented by `InMemoryMemoryService`, only by the real service.
+  write (`memories.create`, no extraction judgment involved) but isn't implemented by
+  `InMemoryMemoryService`, only by the real service, so it's not used here (would mean two
+  different write paths for stub vs. live) -- candidate to revisit if this project stops
+  needing to run against the stub at all.
+- **Live resource exists already, closing an open question:** no separate Memory Bank resource
+  to create -- `VertexAiMemoryBankService(agent_engine_id=...)` just points at the existing
+  M7.1 reasoning engine (`3717518632499019776`); see `docs/COURSE.md`'s API currency notes.
+  New `tests/integration/hr_agent/test_memory_bank_live.py` builds a `Runner` directly (not
+  `InMemoryRunner`, which has no `memory_service` override) with that service, a dedicated
+  `user_id` (`m4.2-live-memory-test`) so it doesn't mix with M7's own live-deploy verification
+  traffic on the same resource, and a `MEMORY_BANK_AGENT_ENGINE_ID` env var so it skips cleanly
+  when unset (new `.env.example` entries, `MEMORY_BANK_AGENT_ENGINE_ID`/`MEMORY_BANK_LOCATION`).
+  `conftest.py`'s turn-runner helper was promoted from module-private (`_run_turn`, hardcoded
+  `user_id="u1"`) to shared (`run_turn`, `user_id` parameter, `Runner`-typed not
+  `InMemoryRunner`-typed) so both files use it.
+  **The "zero code change" claim above was wrong for the write path, found live:** the first
+  run of the new test failed -- not on wiring, but because `search_memory` came back empty
+  right after the first session. Isolated with a throwaway script calling
+  `add_events_to_memory(..., custom_metadata={"wait_for_completion": True})` directly (bypasses
+  the default fire-and-forget `ingest_events` path -- see
+  `vertex_ai_memory_bank_service.py:_add_events_to_memory_via_ingest`'s own comment that it
+  intentionally doesn't await the backend call) against several phrasings: the original
+  role="model" synthetic note, a role="user" statement without a "remember" cue, and a plain
+  role="user"/role="model" Q&A exchange all produced **zero** extracted memories, no error --
+  the real Memory Bank's extraction model silently drops anything that doesn't read as the user
+  explicitly asking to remember a fact about themselves. Only a role="user" event phrased as an
+  explicit "remember" instruction (`"Remember that I previously asked about employee {id}."`)
+  was reliably extracted. `_persist_to_memory` (`hr_agent/agents/pto.py`) was changed to that
+  shape; `InMemoryMemoryService` stores whatever it's given verbatim regardless of role, so this
+  is still safe for local dev and `tests/unit/hr_agent/test_memory.py`, which still passes
+  unchanged (it only asserts the employee ID appears and the PTO hours don't). This is the
+  general shape of the gap worth remembering: a memory service's *interface* being
+  stub-compatible says nothing about whether the stub and the real backend treat the same
+  *content* the same way -- here they diverge on an LLM-judged step the stub has no equivalent
+  of at all.
+  Verified live end to end (`test_memory_bank_live.py`, real Gemini + real Memory Bank, no
+  mocks): a first session asks about E1002, a second session recalls it via `load_memory`
+  without being told again, and `get_pto_balance` returns the real balance -- same scenario as
+  `test_memory_live.py`'s stub version, now proven against the actual Module 7 deployment
+  target. `vertexai.Client` emits a `FutureWarning` (deprecated in favor of
+  `agentplatform.Client`) on this SDK version -- noted, not acted on (filterwarnings in
+  `pyproject.toml` only suppresses warnings already known to be noise; this one's new).
 - Context growth: `ContextFilterPlugin` (`before_model_callback`, drops whole old invocations
   from the model payload, deterministic and free) chosen over `EventsCompactionConfig`
   (LLM-summarized, still `@experimental`) for this project's scale. Wired via an `App(...)`
@@ -601,8 +643,11 @@ been cut; see git history for the blow-by-blow if needed.
   instead of re-asking or re-submitting, or that it treats memory as reference-only rather than
   identity -- both are prompt rules, not guardrails. Candidate Module 5 eval cases: a repeated
   ID on a second turn, a memory entry with injected instructions, a stale/wrong recalled ID.
-- Real Agent Engine + Memory Bank instance not yet created (deferred to Module 7); revisit
-  whether provisioning belongs earlier if Module 5 evals need live memory behavior sooner.
+- Resolved 2026-10-01: no separate Memory Bank instance was ever needed -- the M7.1 Agent
+  Engine resource already serves it, and `test_memory_bank_live.py` verifies against it. Still
+  open: M5's eval suite has no case exercising live Memory Bank at all (it runs against
+  whatever `adk eval`'s own runner wires up, presumably the stub) -- same class of gap as the
+  cross-session-recall proxy noted above.
 - `num_invocations_to_keep=6` is unmeasured; needs real conversation-length/cost data. Reconfirm
   `EventsCompactionConfig`'s stability before relying on summarization over trimming.
 - Eval thresholds (`response_match_score` 0.3) and the "all cases pass" claim are from one live
