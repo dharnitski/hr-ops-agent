@@ -59,7 +59,7 @@ unchecked step.
 - [x] 2. ~~Deploy to Cloud Run (`adk deploy cloud_run`)~~ — skipped, staying on Agent Engine
       only (2026-09-29 scope decision, see Decisions)
 - [x] 3. ~~Deploy to GKE (`adk deploy gke`)~~ — skipped, same decision
-- [ ] 4. Least-privilege service account, Secret Manager
+- [x] 4. Least-privilege service account, Secret Manager
 - [ ] 5. CI/CD with eval gate, staging then prod
 - [ ] 6. Compare with Agent Starter Pack layout
 - [ ] 7. Tear down unused resources
@@ -546,6 +546,52 @@ been cut; see git history for the blow-by-blow if needed.
   open item ("not yet confirmed... just deployed, not walked through") for real -- Module 6's
   guardrails are now provably exercised against the live deployed agent, not just locally and
   in integration tests.
+- **M7.4 (least-privilege service account, Secret Manager, 2026-10-01):** until now the
+  deployed reasoning engine's `spec.effectiveIdentity` was the Google-managed default,
+  `service-976559775904@gcp-sa-aiplatform-re.iam.gserviceaccount.com`, holding the predefined
+  `roles/aiplatform.reasoningEngineServiceAgent` (56 permissions spanning endpoints,
+  sessions, memories, Model Armor, Developer Connect, monitoring, GCS read -- most unused by
+  this agent). Checked first, not assumed: this is *not* the default Compute Engine SA
+  (which does hold `roles/editor` in this project) -- Agent Engine wasn't defaulting to the
+  worst case, just to a shared, unscoped one.
+  Created `hr-agent-runtime@hr-ops-agent-509718.iam.gserviceaccount.com` holding exactly one
+  project-level role, `roles/aiplatform.user` (covers `endpoints.predict`/Gemini calls,
+  `sessions.*`, `memories.*` -- the surface this agent actually uses; accepted its unused
+  extras, e.g. batch prediction jobs and vector index endpoints, as the cost of staying
+  predefined rather than building a custom role for a course project). Also granted
+  `roles/run.invoker` on the `mcp-server` Cloud Run service to this new SA (the same grant
+  M7.3 gave the old default identity) -- added alongside the existing grant first, kept as a
+  rollback path, removed only after the new identity was verified working live.
+  `adk deploy agent_engine` has no `--service_account` flag, but auto-reads
+  `<agent_folder>/.agent_engine_config.json` and passes it straight through as the API's
+  `AgentEngineConfig`, which does accept `service_account` -- confirmed by reading
+  `vertexai._genai.types.common.AgentEngineConfig` in the installed SDK rather than guessing
+  from CLI `--help`. Added `hr_agent/.agent_engine_config.json` with that one key; redeployed
+  with the same command as M7.3 (`--agent_engine_id=3717518632499019776`, absolute
+  `--env_file`, `--extra_packages=mcp_server`) -- the deploy classifier blocks this Bash
+  command for an agent session the same way it blocked M7.1's, so the actual `adk deploy` run
+  was done by the user, not this session.
+  First deploy attempt did nothing silently *again* -- not M7.3's two known failure modes,
+  but a third: the user ran a copy of the command with the flags dropped, so `adk deploy`
+  just printed its usage error. Confirmed via `GET reasoningEngines/{id}`: `updateTime`
+  unchanged from the prior deploy. Caught by checking the live resource rather than trusting
+  "the user said they ran it" -- re-ran the full command correctly, which produced an
+  `updateTime` bump and `effectiveIdentity` flipping to `hr-agent-runtime`.
+  **Verified live end to end** via `:streamQuery` under the new identity: `identify_caller`
+  then `get_pto_balance(employee_id="E1002")` both fired over the real network through
+  `mcp-server` and returned the real balance (64.5h PTO / 24.0h sick, Bob Smith) -- proving
+  the new SA's `aiplatform.user` role is sufficient for the agent's own model/session calls
+  and that its `run.invoker` grant satisfies Cloud Run IAM. Re-verified a second time, fresh
+  session, after revoking the old default identity's `run.invoker` grant -- same result,
+  confirming the rollback grant was safe to remove and `mcp-server`'s IAM policy now lists
+  exactly one invoker.
+  **Secret Manager: marked N/A, not skipped silently.** Checked `hr_agent/.env`,
+  `.env.agent_engine`, and `.env.example` directly -- every value is a project ID, region,
+  model ID, or URL; none is a credential. Auth to `mcp-server` is ID-token/ADC-based (M7.3),
+  not a stored secret. Nothing in this project currently needs Secret Manager; revisit if a
+  real credential (e.g. a non-GCP API key) is ever added.
+  New gotcha for `docs/COURSE.md`: `--env_file` now prints a deprecation warning on this adk
+  version but still functions -- noted there rather than assuming it's about to break.
 
 ## Open questions
 

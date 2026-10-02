@@ -90,6 +90,22 @@ this stack moves fast and these notes will drift.
   resource directly over its `:streamQuery` REST method (`class_method: stream_query`) is a
   reliable way to verify a fix without relying on the console UI at all.
   `adk deploy cloud_run ...`/`adk deploy gke ...` not yet re-verified against current docs.
+- **Least-privilege runtime identity (checked 2026-10-01, adk 2.9.2):** `adk deploy
+  agent_engine` has no `--service_account` flag, but it auto-reads
+  `<agent_folder>/.agent_engine_config.json` and passes it straight through as the
+  `AgentEngineConfig` sent to the API — that type accepts `service_account` (and
+  `identity_type`; default resolves to `SERVICE_ACCOUNT`), confirmed by inspecting
+  `vertexai._genai.types.common.AgentEngineConfig` in the installed SDK. Without it, the
+  resource's `spec.effectiveIdentity` defaults to the Google-managed
+  `service-<PROJECT_NUMBER>@gcp-sa-aiplatform-re.iam.gserviceaccount.com` (holds the
+  predefined `roles/aiplatform.reasoningEngineServiceAgent`, not the broad default Compute
+  SA `roles/editor` — better than the worst case, but still a shared default, not scoped to
+  what one specific agent calls). Confirm `effectiveIdentity` for any project via `GET
+  reasoningEngines/{id}`, don't assume the `gcp-sa-aiplatform-re` pattern.
+  **Gotcha:** `--env_file` now prints `WARNING: ... is deprecated and will be removed.
+  Please leave it unspecified` on this version but still works when passed — the deprecation
+  warning is new since the M7.1 notes above were written; `--env_file` itself is not yet
+  actually removed.
 - **Memory Bank still current** for Module 4 long-term memory, now documented as "Agent
   Platform Memory Bank"; ADK auto-orchestrates store/retrieve calls against it when
   configured with `VertexAiMemoryBankService` (name subject to the same 2.x import-path

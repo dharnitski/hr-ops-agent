@@ -10,6 +10,7 @@ project `hr-ops-agent-509718`, region `us-central1`:
 | Agent Engine (the agent) | `reasoningEngines/3717518632499019776` |
 | Cloud Run service (`mcp_server`) | `mcp-server` → `https://mcp-server-976559775904.us-central1.run.app` |
 | Artifact Registry repo | `hr-ops-agent` (Docker, us-central1) |
+| Agent Engine runtime identity | `hr-agent-runtime@hr-ops-agent-509718.iam.gserviceaccount.com` (custom, `roles/aiplatform.user` only — see `docs/PROGRESS.md`'s M7.4) |
 
 ## One-time setup (already done; here for a fresh project)
 
@@ -52,13 +53,16 @@ gcloud run services update mcp-server --region=us-central1 --project=hr-ops-agen
 
 gcloud run services add-iam-policy-binding mcp-server \
   --region=us-central1 --project=hr-ops-agent-509718 \
-  --member="serviceAccount:service-976559775904@gcp-sa-aiplatform-re.iam.gserviceaccount.com" \
+  --member="serviceAccount:hr-agent-runtime@hr-ops-agent-509718.iam.gserviceaccount.com" \
   --role="roles/run.invoker"
 ```
 
-The member above is Agent Engine's actual runtime identity — confirm it for a different
-project with `GET reasoningEngines/{id}` and read `spec.effectiveIdentity`, don't assume the
-`gcp-sa-aiplatform-re` pattern. Granting IAM roles isn't something an agent session can do
+The member above is Agent Engine's actual runtime identity (`spec.effectiveIdentity` on the
+reasoning engine resource) — as of M7.4 this is the custom `hr-agent-runtime` SA, not the
+Google-managed `service-<PROJECT_NUMBER>@gcp-sa-aiplatform-re.iam.gserviceaccount.com`
+default. Confirm it for a different project (or if `hr_agent/.agent_engine_config.json` is
+ever removed) via `GET reasoningEngines/{id}` and read `spec.effectiveIdentity` directly,
+don't assume either pattern. Granting IAM roles isn't something an agent session can do
 unattended (blocked by this project's own permission classifier) — run this one yourself.
 
 ## Redeploy the agent (Agent Engine)
@@ -74,6 +78,10 @@ uv run adk deploy agent_engine \
   --display_name="hr-ops-agent (Module 7.1)" \
   hr_agent
 ```
+
+`hr_agent/.agent_engine_config.json` (`{"service_account": "hr-agent-runtime@..."}`) is
+auto-read from the agent folder — no flag needed, but don't delete it, or the next deploy
+silently reverts `effectiveIdentity` to the Google-managed default (M7.4).
 
 Both flags are load-bearing, not optional flourishes:
 
@@ -103,10 +111,21 @@ broken result. Check the live resource, then exercise it.
 TOKEN=$(gcloud auth print-access-token)
 curl -s -H "Authorization: Bearer $TOKEN" \
   "https://us-central1-aiplatform.googleapis.com/v1/projects/976559775904/locations/us-central1/reasoningEngines/3717518632499019776" \
-  | python3 -c "import json,sys; d=json.load(sys.stdin); [print(e['name'],'=',e['value']) for e in d['spec']['deploymentSpec'].get('env',[])]"
+  | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print('updateTime:', d.get('updateTime'))
+print('effectiveIdentity:', d['spec'].get('effectiveIdentity'))
+[print(' ', e['name'],'=',e['value']) for e in d['spec']['deploymentSpec'].get('env',[])]
+"
 ```
 
-Empty output means the `--env_file` bug above happened again.
+Empty `env` output means the `--env_file` bug above happened again. Check `updateTime`
+against when you ran the deploy first — an unchanged timestamp means the deploy never
+reached the resource at all (e.g. a mistyped command with flags dropped), not that it ran
+and did nothing. `effectiveIdentity` should read `hr-agent-runtime@...`, not the
+`gcp-sa-aiplatform-re` default — if it reverted, `.agent_engine_config.json` was likely
+missing from the agent folder for that deploy.
 
 **2. Exercise a real conversation.** `stream_query` needs a *real* session — a made-up
 `session_id` string silently produces zero events (learned the hard way):
