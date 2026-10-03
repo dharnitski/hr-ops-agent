@@ -9,7 +9,7 @@
 per tier. Each tier gets its own trajectory-matching strictness because the property each
 tier is meant to guarantee is different:
 
-- **`happy_path`** (15 cases) / **`ambiguous`** (8 cases): `ANY_ORDER` + `ignore_args: true`.
+- **`happy_path`** (15 cases) / **`ambiguous`** (6 cases): `ANY_ORDER` + `ignore_args: true`.
   These tiers exist to check the model reaches the right tools and the right answer, not the
   exact shape of how it got there. `ANY_ORDER` tolerates legitimate extra calls (e.g. the
   model double-checking a recalled ID) and calls firing out of causal order between
@@ -57,8 +57,11 @@ tier is meant to guarantee is different:
 - **None of the above cover cross-session memory recall** (`load_memory`): an `EvalCase`
   conversation is one session, and relying on the eval runner reusing one `user_id`'s
   `InMemoryMemoryService` state across separate cases was judged too fragile to build a
-  regression case on. That path stays covered only by the live integration test
-  (`tests/integration/hr_agent/test_memory_live.py`), outside this suite and outside CI.
+  regression case on. Worse for the real backend: `adk eval` never passes a `memory_service`,
+  and the runner falls back to `InMemoryMemoryService()` (no flag or env override, adk 2.9.2),
+  so a case would silently test the stub, not Memory Bank. That path is covered only by live
+  integration tests, outside this suite and outside CI: `test_memory_live.py` (stub) and
+  `test_memory_bank_live.py` (real Memory Bank, billed).
 
 ## Launch bar (docs/PROGRESS.md M5.4)
 
@@ -66,13 +69,13 @@ Four dimensions; only one is mechanically gated today.
 
 | Dimension | Bar | Enforced by CI today? |
 |---|---|---|
-| Task success | All 31 cases pass their tier's criteria | Yes — `scripts/run_eval_gate.py` |
-| Zero unauthorized access | Zero tolerance | No — no case exercises caller identity/authorization; the tool/MCP layer has no server-side enforcement yet (Module 6). Documented gap, not an oversight. |
+| Task success | All 29 cases pass their tier's criteria | On demand only — `scripts/run_eval_gate.py` via manual `workflow_dispatch` (live, billed model calls); not on PRs |
+| Zero unauthorized access | Zero tolerance | Not by evals — enforcement is server-side (caller-identity, self-only and role checks, Module 6) and covered by `mcp_server` unit tests. Cases seed `caller_employee_id` but none asserts `forbidden` (e.g. a different, valid employee ID, or a wrong-role payroll caller) against the live agent. Documented gap. |
 | p95 latency | <5s read turn, <10s write turn | No — no instrumentation exists (Module 8). Unmeasured starting floor. |
 | Cost/task | <$0.01 read, <$0.02 write on the configured Flash tier | No — no cost tracking exists (Module 8). Unmeasured starting floor. |
 
 Task success is a fixed regression suite, not a sampled rate — "all cases pass," not "N%
-pass." Do not treat this table's "No" rows as silently satisfied; they are open blockers on
+pass." Do not treat this table's unenforced rows as silently satisfied; they are open blockers on
 calling the agent launch-ready, independent of what the CI gate can mechanically check.
 
 ## CI gate mechanics (`scripts/run_eval_gate.py`)
@@ -110,16 +113,23 @@ calling the agent launch-ready, independent of what the CI gate can mechanically
    view: the case will only pass against a server that hasn't already recorded that key.
    `scripts/run_eval_gate.py`'s per-attempt fresh server handles this in CI; running the case
    manually against a long-lived `mcp_server` will not reproduce a clean pass on a second try.
-5. **Don't add a caller-identity/authorization case yet.** The tool layer enforces none
-   server-side (tracked since M1.8/M2.4, deferred to Module 6) — a case asserting a refusal
-   there would encode a known, accepted gap as if it were a bug. Revisit once Module 6 ships
-   permission boundaries.
+5. **Authorization cases are now fair game, and the most valuable missing kind.** Module 6
+   enforces caller identity and role server-side, so a refusal (`forbidden`) is intended
+   behavior, not a gap. Seed `caller_employee_id` under `session_input.state`, as the existing
+   cases do; it reaches the server through the same header path real traffic takes. Never
+   encode the caller as a tool argument.
 6. **Expect `transfer_to_agent`** as the first call in any expected trajectory that reaches a
    specialist for the first time in that conversation, and omit it on a same-specialist
    follow-up turn.
 
 ## Known open gaps
 
+- No authorization case: a caller asking about a *different*, valid employee ID and getting
+  `forbidden`, or a caller with the wrong role on `get_payroll_run`/`approve_payroll_run`. Only
+  `mcp_server` tests cover that today.
+- No case models the `require_confirmation` pause and resume (`submit_pto_request`,
+  `approve_payroll_run`), and `approve_payroll_run` has no case at all; work out the
+  confirmation pattern before claiming payroll approval is covered.
 - No case exercises cross-session memory recall, stale/incorrect recalled identity used
   without re-resolution, or a memory entry containing injected instructions (candidates
   noted since M4.2/M4.4).
