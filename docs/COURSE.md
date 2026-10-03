@@ -194,8 +194,8 @@ limits. Deliverable: `docs/06-guardrail-standard.md`.
 
 Deploy the agent to Vertex AI Agent Engine (`adk deploy agent_engine`) — the sole deploy
 target for this course; Cloud Run and GKE deploys are skipped by scope decision (2026-09-29,
-see `docs/PROGRESS.md`). Least-privilege service account, Secret Manager, CI/CD with eval
-gate, staging then prod. Compare with Google's Agent Starter Pack layout. Tear down unused
+see `docs/PROGRESS.md`). Least-privilege service account, Secret Manager, infra as code
+(`deploy/terraform/`), CI/CD with eval gate, staging then prod. Compare with Google's Agent Starter Pack layout. Tear down unused
 resources. Deliverable: `docs/07-deployment-tradeoffs.md` (scoped to Agent Engine, not a
 cross-target comparison).
 

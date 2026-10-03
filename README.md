@@ -12,10 +12,10 @@ hr-ops-agent/
 ├── mcp_server/          # HCM tools as an MCP server (Module 2)
 ├── evals/               # eval sets + configs for adk eval (Module 5)
 ├── tests/               # unit/ (hermetic, in CI) and integration/ (real boundaries, on demand)
-├── deploy/              # agent_engine/, cloud_run/, gke/ (Module 7)
+├── deploy/              # agent_engine/, cloud_run/, gke/, terraform/ (Module 7)
 ├── docs/                # one-pagers, architecture doc, strategy memo
 ├── scratch/             # throwaway experiments: ReAct loop, Workflow probes, LangGraph router
-├── .github/workflows/   # CI: lint, tests, eval gate
+├── .github/workflows/   # CI: lint, terraform fmt/validate, tests, eval gate
 ├── AGENTS.md            # project conventions for AI coding agents
 ├── pyproject.toml
 ├── .gitignore           # must include .env

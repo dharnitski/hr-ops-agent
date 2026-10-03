@@ -19,8 +19,7 @@ COPY mcp_server/ mcp_server/
 # HOST/PORT read by mcp_server/server.py's main(). Cloud Run injects PORT at runtime and
 # overrides this default; 8080 matches Cloud Run's own default so `docker run -p 8080:8080`
 # behaves the same locally. MCP_ALLOWED_HOSTS is deliberately not set here -- it depends on
-# the Cloud Run URL assigned at deploy time, so it's a per-deploy --set-env-vars, not
-# something the image can know about itself.
+# the service's hostname, so deploy/terraform/cloud_run.tf sets it, not the image.
 ENV HOST=0.0.0.0
 ENV PORT=8080
 EXPOSE 8080

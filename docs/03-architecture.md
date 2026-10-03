@@ -88,7 +88,8 @@ every call for explicit user approval (`require_confirmation`).
 
 - `hr_agent/` deploys to Agent Engine with a least-privilege runtime service account
   (`hr_agent/.agent_engine_config.json`).
-- `mcp_server/` runs on Cloud Run (`deploy/cloud_run/`). When `HCM_MCP_AUDIENCE` is set the
+- `mcp_server/` runs on Cloud Run (image from `deploy/cloud_run/`; service, service accounts,
+  IAM and Artifact Registry from `deploy/terraform/`). When `HCM_MCP_AUDIENCE` is set the
   agent attaches a Google ID token for Cloud Run's IAM check; that is infra auth, separate
   from caller identity. Locally the server is plain `http://localhost:8000/mcp`.
 - Cloud Run / GKE for the agent itself was skipped; see `docs/07-deployment-procedure.md`.

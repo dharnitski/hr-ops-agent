@@ -17,6 +17,18 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run ty check
 
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate
+
   test:
     runs-on: ubuntu-latest
     steps:

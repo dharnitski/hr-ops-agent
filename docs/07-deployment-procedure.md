@@ -5,6 +5,9 @@ How to deploy and redeploy this project's two live pieces: the agent (Agent Engi
 Cloud Run/GKE; see `docs/PROGRESS.md`'s Module 7 decisions for why). Current live resources,
 project `hr-ops-agent-509718`, region `us-central1`:
 
+Everything except the Agent Engine resource is managed by `deploy/terraform/`; change it
+there, not with ad hoc `gcloud`.
+
 | Resource | ID / URL |
 |---|---|
 | Agent Engine (the agent) | `reasoningEngines/3717518632499019776` |
@@ -13,16 +16,23 @@ project `hr-ops-agent-509718`, region `us-central1`:
 | Memory Bank | The Agent Engine resource above; nothing separate to provision. The deployed agent uses it automatically; `MEMORY_BANK_AGENT_ENGINE_ID` in `.env` is only for `tests/integration/hr_agent/test_memory_bank_live.py` |
 | Agent Engine runtime identity | `hr-agent-runtime@hr-ops-agent-509718.iam.gserviceaccount.com` (custom, `roles/aiplatform.user` only — see `docs/PROGRESS.md`'s M7.4) |
 
-## One-time setup (already done; here for a fresh project)
+## Infrastructure (Terraform)
+
+APIs, the Artifact Registry repo, both runtime service accounts and their IAM, and the
+`mcp-server` Cloud Run service live in `deploy/terraform/` (applied 2026-10-02). Not managed
+there: the Agent Engine resource (`adk deploy` owns it) and the Cloud Run image tag. For a
+fresh project:
 
 ```bash
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
-  --project=hr-ops-agent-509718
-
-gcloud artifacts repositories create hr-ops-agent \
-  --repository-format=docker --location=us-central1 \
-  --project=hr-ops-agent-509718
+cd deploy/terraform
+# edit vars/env.tfvars (project_id, mcp_server_image), then add `import` blocks only for
+# resources that already exist
+terraform init && terraform apply -var-file=vars/env.tfvars
 ```
+
+State is local and gitignored. An agent session can't run `apply` (blocked by this project's
+permission classifier); run it yourself. Passing `-auto-approve` is needed if you launch it
+from a non-interactive shell.
 
 ## Redeploy `mcp_server` (Cloud Run)
 
@@ -36,35 +46,24 @@ gcloud builds submit \
 
 gcloud run deploy mcp-server \
   --image=us-central1-docker.pkg.dev/hr-ops-agent-509718/hr-ops-agent/mcp-server:v1 \
-  --region=us-central1 --project=hr-ops-agent-509718 \
-  --no-allow-unauthenticated --min-instances=0 --max-instances=2 --port=8080
+  --region=us-central1 --project=hr-ops-agent-509718
 ```
 
+Only the image is passed: scaling, port, ingress, env and identity are owned by
+`deploy/terraform/cloud_run.tf`, so don't repeat them here (a flag here would drift from
+Terraform). Terraform ignores the image after creation, so this deploy and `terraform plan`
+don't fight.
 The image tag (`:v1` above) doesn't bump itself — pick a new tag per real change, or `gcloud
 run deploy` will happily redeploy the exact same image again. `deploy/cloud_run/cloudbuild.yaml`
 exists only because `mcp_server.Dockerfile` isn't literally named `Dockerfile` at the repo
 root — `gcloud builds submit --tag` can't find it otherwise.
 
-**First deploy only** — the two steps below need the URL Cloud Run assigns, which doesn't
-exist until after the first `run deploy`:
-
-```bash
-gcloud run services update mcp-server --region=us-central1 --project=hr-ops-agent-509718 \
-  --update-env-vars=MCP_ALLOWED_HOSTS=mcp-server-976559775904.us-central1.run.app
-
-gcloud run services add-iam-policy-binding mcp-server \
-  --region=us-central1 --project=hr-ops-agent-509718 \
-  --member="serviceAccount:hr-agent-runtime@hr-ops-agent-509718.iam.gserviceaccount.com" \
-  --role="roles/run.invoker"
-```
-
-The member above is Agent Engine's actual runtime identity (`spec.effectiveIdentity` on the
-reasoning engine resource) — as of M7.4 this is the custom `hr-agent-runtime` SA, not the
-Google-managed `service-<PROJECT_NUMBER>@gcp-sa-aiplatform-re.iam.gserviceaccount.com`
-default. Confirm it for a different project (or if `hr_agent/.agent_engine_config.json` is
-ever removed) via `GET reasoningEngines/{id}` and read `spec.effectiveIdentity` directly,
-don't assume either pattern. Granting IAM roles isn't something an agent session can do
-unattended (blocked by this project's own permission classifier) — run this one yourself.
+`MCP_ALLOWED_HOSTS` and the agent's `roles/run.invoker` grant are set by Terraform, so there
+is no first-deploy fix-up step. The host is derived from the project number
+(`mcp-server-<PROJECT_NUMBER>.<region>.run.app`). The invoker is Agent Engine's actual runtime
+identity (`spec.effectiveIdentity` on the reasoning engine), the custom `hr-agent-runtime` SA
+since M7.4. If you change that identity, change `service_accounts.tf`/`iam.tf` and apply.
+Confirm the live value via `GET reasoningEngines/{id}`, don't assume.
 
 ## Redeploy the agent (Agent Engine)
 
@@ -180,10 +179,11 @@ severity>=WARNING
 ## Teardown (Module 7 checklist item 7 — not done yet)
 
 ```bash
-gcloud run services delete mcp-server --region=us-central1 --project=hr-ops-agent-509718
-gcloud artifacts repositories delete hr-ops-agent --location=us-central1 --project=hr-ops-agent-509718
-# Agent Engine resource: delete via console, or the equivalent DELETE on reasoningEngines/{id}
+cd deploy/terraform && terraform destroy -var-file=vars/env.tfvars
+# Agent Engine resource (not in Terraform): delete via console, or DELETE on reasoningEngines/{id}
 ```
 
-Do this once Module 7's deploy-target comparison and this course module are actually done, not
-before — idle Cloud Run/Agent Engine cost is low but real.
+`destroy` removes Cloud Run, the Artifact Registry repo (and its images), both service
+accounts and their IAM. APIs stay enabled (`disable_on_destroy = false`). Do this once Module
+7 and this course module are actually done, not before — idle Cloud Run/Agent Engine cost is
+low but real.
