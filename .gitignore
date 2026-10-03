@@ -42,4 +42,5 @@ evals/**/results/
 deploy/**/*.tfstate
 deploy/**/*.tfstate.backup
 deploy/**/.terraform/
+deploy/**/*.tfplan
 .adk/

@@ -18,7 +18,8 @@ An HR operations agent built on Google ADK. HCM tools are exposed via an MCP ser
 - `tests/integration/` — tests that cross a real boundary: a running MCP server, the ADK
   agent wiring, or live model/GCP calls. May need `.env`/credentials; slower and
   non-deterministic. Mark model-calling tests `@pytest.mark.integration`.
-- `deploy/` — `agent_engine/`, `cloud_run/`, `gke/` configs (Module 7).
+- `deploy/` — `agent_engine/`, `cloud_run/`, `gke/` configs, plus `terraform/` (project infra:
+  APIs, service accounts/IAM, Artifact Registry, `mcp-server` Cloud Run) (Module 7).
 - `docs/` — one-pagers, architecture doc, strategy memo.
 - `scratch/` — throwaway experiments (e.g. `react_from_scratch.py`); not imported by
   production code, not covered by CI.
@@ -26,6 +27,9 @@ An HR operations agent built on Google ADK. HCM tools are exposed via an MCP ser
 ## Conventions
 - Python >= 3.14 via `uv` (`uv sync`, `uv add`, `uv run ...`) — no bare `pip`/`venv`.
 - Lint with `ruff`, format with `ruff format`, type-check with `ty`. All three run in CI.
+- Infra changes go through `deploy/terraform/` (`terraform plan` before `apply`), not ad hoc
+  `gcloud`. Agent Engine itself stays with `adk deploy`. CI runs `terraform fmt -check` and
+  `validate`; `apply` is manual.
 - Secrets in `.env` (gitignored); document required vars in `.env.example`.
 - New HCM tools need: handler in `mcp_server/`, unit test in `tests/unit/`, an integration
   test in `tests/integration/` if it crosses the MCP boundary, and an eval case in `evals/`

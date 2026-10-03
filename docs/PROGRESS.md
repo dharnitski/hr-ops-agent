@@ -653,6 +653,21 @@ been cut; see git history for the blow-by-blow if needed.
   write/recall path is covered by inference (same code, same resource), not a direct test.
   Gotcha for ad hoc verification scripts: under zsh, `$BASE:query` expands as a `:q`
   modifier, not `$BASE` + `:query` -- use `${BASE}:query`/`${BASE}:streamQuery`.
+- **Terraform for project infra (2026-10-02, part of M7.6's Agent Starter Pack comparison):**
+  `deploy/terraform/` modeled on ASP's `deployment/terraform/`, collapsed to one project: APIs,
+  Artifact Registry, `hr-agent-runtime` and a new `mcp-server-runtime` SA, `mcp-server` Cloud
+  Run, invoker grant. Deliberately *not* in Terraform: the Agent Engine resource (`adk deploy`
+  owns code/env/identity; ASP's dummy-source-plus-`ignore_changes` pattern isn't worth it for
+  one live engine) and the Cloud Run image tag (`ignore_changes`; shipped by Cloud Build).
+  Adopted the hand-made M7 resources with `import` blocks (3 imported, 10 added, 1 changed).
+  Two real changes: `mcp-server` moved off the default Compute SA (`roles/editor`) to a
+  role-less SA (it calls no Google APIs), and `MCP_ALLOWED_HOSTS` is derived from the project
+  number, removing the first-deploy fix-up step. Verified live, not by exit code: new
+  revision runs as `mcp-server-runtime`, invoker policy lists only `hr-agent-runtime`, second
+  `plan` shows no changes, and a fresh two-turn `:streamQuery` still fired `identify_caller`
+  then `get_pto_balance` (64.5h/24.0h, E1002) through `mcp-server`. State is local
+  (gitignored); a GCS backend is needed before CI runs `apply` (M7.5). CI runs `terraform fmt
+  -check` and `validate` only. Item 6 stays unchecked until `docs/07-asp-comparison.md` exists.
 
 ## Open questions
 
