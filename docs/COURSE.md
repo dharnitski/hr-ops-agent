@@ -127,6 +127,10 @@ it matters (env var choices, model IDs, import paths).
   `prompt=`). Gemini on Vertex: `langchain_google_genai.ChatGoogleGenerativeAI(model=...,
   vertexai=True, location="global")`. Installed: langgraph 1.2.12, langchain 1.4.2,
   langchain-google-genai 4.4.0 (dev group; comparison only).
+- **Tracing flags (hands-on 2026-10-05, adk 2.9.2):** `--trace_to_cloud` is deprecated; use
+  `--otel_to_cloud` (`adk web`, `adk deploy agent_engine`). Locally it needs `google-adk[gcp,
+  otel-gcp]`. Spans carry prompts and tool results by default; set
+  `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false` (this repo does in `hr_agent/config.py`).
 
 ## Module 1 — Foundations and first ADK agent
 

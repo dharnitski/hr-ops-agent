@@ -1,7 +1,7 @@
 variable "agent_runtime_roles" {
   type        = list(string)
-  description = "Project roles for the Agent Engine runtime SA. Cover model calls, sessions and memories."
-  default     = ["roles/aiplatform.user"]
+  description = "Project roles for the Agent Engine runtime SA. Cover model calls, sessions and memories, plus writing OTel traces (M8.1)."
+  default     = ["roles/aiplatform.user", "roles/telemetry.tracesWriter"]
 }
 
 resource "google_project_iam_member" "agent_runtime" {

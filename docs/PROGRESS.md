@@ -69,7 +69,7 @@ unchecked step.
       runbook; this one's still the why-Agent-Engine analysis, not yet written.
 
 ## Module 8 — Observability, cost, Staff-level artifacts
-- [ ] 1. OpenTelemetry traces to Cloud Trace
+- [x] 1. OpenTelemetry traces to Cloud Trace (local and deployed, 2026-10-05)
 - [ ] 2. Dashboard: task success, tool error rate, latency, cost/task
 - [ ] 3. Model-tier routing (Flash vs. Pro) with measured savings
 - [ ] 4. Failure drill + RCA
@@ -668,6 +668,41 @@ been cut; see git history for the blow-by-blow if needed.
   then `get_pto_balance` (64.5h/24.0h, E1002) through `mcp-server`. State is local
   (gitignored); a GCS backend is needed before CI runs `apply` (M7.5). CI runs `terraform fmt
   -check` and `validate` only. Item 6 stays unchecked until `docs/07-asp-comparison.md` exists.
+
+### Module 8
+- **M8.1 (traces to Cloud Trace, local half, 2026-10-05):** `adk web --otel_to_cloud` exports
+  to `telemetry.googleapis.com` (OTLP, already enabled); needs `google-adk[gcp,otel-gcp]`
+  (added to the dev group -- without it the exporter import fails, and without `otel-gcp`
+  metrics export 400s). Verified in Cloud Trace: one `invocation` span -> `invoke_agent` per
+  agent -> `call_llm` -> `generate_content`, `execute_tool`, and client-side `MCP send ...`
+  spans. The router hop ~2.6s, `pto_agent` ~3.7s of a ~6.2s turn; each model call is ~0.8-1.5s
+  and dominates, `get_pto_balance` itself is ~70ms. MCP server work shows only as the client's
+  `MCP send` spans -- no trace context reaches `mcp_server`, so server-side time isn't a
+  child span (candidate follow-up). Token counts (`gen_ai.usage.*`) are on every model span,
+  which is the raw input for 8.2's cost/task.
+  **Privacy finding:** by default ADK puts the full LLM request/response, tool args and tool
+  results on spans -- the `get_pto_balance` result (PTO hours) was readable in Cloud Trace,
+  contradicting M4.4. `adk deploy --otel_to_cloud` sets `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=
+  false` for deploys, but local runs default to true. `hr_agent/config.py` now
+  `setdefault`s it to false for every entry point; verified a fresh trace carried no question
+  text, balance or tool args. Token counts, timings and tool names remain.
+  Cloud Trace v1 list API rate-limits (429) quickly when polled; page with backoff.
+  **Deployed half (2026-10-05):** `deploy/terraform/iam.tf` adds `roles/telemetry.tracesWriter`
+  (one permission, `telemetry.traces.write`) to `hr-agent-runtime`; applied by the user (1
+  added). Redeployed in place with `--otel_to_cloud` (added to the runbook command). No
+  `requirements.txt` change was needed -- the Agent Engine runtime brings its own exporters.
+  Verified live, not by exit code: `updateTime` advanced, `effectiveIdentity` still
+  `hr-agent-runtime`, `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=true` and
+  `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false` landed with no empty values, and a fresh
+  `:streamQuery` session ran `transfer_to_agent` -> `identify_caller` -> `get_pto_balance`.
+  Its trace is in Cloud Trace (21 spans; root is `invoke_workflow` on Agent Engine, `invocation`
+  locally) with no question text, balance or tool args on any span.
+  Deployed-only observations: the first MCP `initialize` took ~4.5s (Cloud Run cold start;
+  `pto_agent` ~9.2s of a ~10.6s turn) vs ~15ms locally -- a latency cost the 8.2 dashboard
+  and 5s p95 bar must account for. Cloud Run emits its own `/mcp` trace for the same call,
+  but as a separate trace, not a child of the agent's -- confirms no `traceparent`
+  propagation. Metrics/logs writer roles were left out on purpose (`--otel_to_cloud` enables
+  those exporters too, so 403s may appear in runtime logs until 8.2 adds them).
 
 ## Open questions
 

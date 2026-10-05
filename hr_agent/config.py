@@ -5,6 +5,12 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent / ".env")
 
+# Module 8.1: ADK defaults to putting full prompts, tool args and tool results (PTO balances
+# included) on trace spans, unless `adk deploy --otel_to_cloud` happens to set this to false.
+# Default it off for every entry point (adk web/run, tests, deploy); set it to true in .env
+# only to debug a specific trace, never in a deployed env file (M4.4).
+os.environ.setdefault("ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS", "false")
+
 # Default keeps import working without secrets (unit tests, CI); override via MODEL_ID in .env.
 # TODO: retest gemini-3.8-flash (slow on 2026-09-25; see .env.example)
 DEFAULT_MODEL_ID = "gemini-3.5-flash-lite"
