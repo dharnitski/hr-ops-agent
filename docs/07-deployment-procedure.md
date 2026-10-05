@@ -75,6 +75,7 @@ uv run adk deploy agent_engine \
   --agent_engine_id=3717518632499019776 \
   --env_file="$(pwd)/hr_agent/.env.agent_engine" \
   --extra_packages=mcp_server \
+  --otel_to_cloud \
   --display_name="hr-ops-agent (Module 7.1)" \
   hr_agent
 ```
@@ -94,6 +95,11 @@ Both flags are load-bearing, not optional flourishes:
   folder by default — this cross-package import is invisible in every local test (both
   packages share one installed `PYTHONPATH` there) and only breaks in the deployed container
   (`ModuleNotFoundError: No module named 'mcp_server'`).
+- **`--otel_to_cloud`** (M8.1) exports traces, metrics and logs to Cloud Trace/Monitoring/
+  Logging. It sets `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY=true` and, unless already set,
+  `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false`. The runtime SA needs `roles/telemetry.tracesWriter`
+  (in `deploy/terraform/iam.tf`); without it, spans are silently dropped. Verify env var
+  `GOOGLE_CLOUD_AGENT_ENGINE_ENABLE_TELEMETRY` after deploy like the others.
 - `hr_agent/.env.agent_engine` (gitignored, mirrors `hr_agent/.env` but points `HCM_MCP_URL`/
   `HCM_MCP_AUDIENCE` at the Cloud Run service instead of `localhost:8000`) exists so local dev
   (`hr_agent/.env`) and the deployed agent can point at different servers without one
@@ -127,7 +133,8 @@ and did nothing. `effectiveIdentity` should read `hr-agent-runtime@...`, not the
 `gcp-sa-aiplatform-re` default — if it reverted, `.agent_engine_config.json` was likely
 missing from the agent folder for that deploy.
 
-**2. Exercise a real conversation.** `stream_query` needs a *real* session — a made-up
+**2. Exercise a real conversation** (then find its trace in Cloud Trace Explorer; no span should
+carry message text or a balance). `stream_query` needs a *real* session — a made-up
 `session_id` string silently produces zero events (learned the hard way):
 
 ```bash
