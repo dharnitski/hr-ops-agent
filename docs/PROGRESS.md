@@ -61,12 +61,12 @@ unchecked step.
       only (2026-09-29 scope decision, see Decisions)
 - [x] 3. ~~Deploy to GKE (`adk deploy gke`)~~ — skipped, same decision
 - [x] 4. Least-privilege service account, Secret Manager
-- [ ] 5. CI/CD with eval gate, staging then prod
-- [ ] 6. Compare with Agent Starter Pack layout
-- [ ] 7. Tear down unused resources
-- [ ] 8. `docs/07-deployment-tradeoffs.md` (scoped to Agent Engine only) -- distinct from
+- [x] 5. CI/CD with eval gate, staging then prod
+- [x] 6. Compare with Agent Starter Pack layout
+- [x] 7. Tear down unused resources
+- [x] 8. `docs/07-deployment-tradeoffs.md` (scoped to Agent Engine only) -- distinct from
       `docs/07-deployment-procedure.md` (added 2026-09-29): that one's the how-to-redeploy
-      runbook; this one's still the why-Agent-Engine analysis, not yet written.
+      runbook; this one's the why-Agent-Engine analysis.
 
 ## Module 8 — Observability, cost, Staff-level artifacts
 - [x] 1. OpenTelemetry traces to Cloud Trace (local and deployed, 2026-10-05)
@@ -668,6 +668,12 @@ been cut; see git history for the blow-by-blow if needed.
   then `get_pto_balance` (64.5h/24.0h, E1002) through `mcp-server`. State is local
   (gitignored); a GCS backend is needed before CI runs `apply` (M7.5). CI runs `terraform fmt
   -check` and `validate` only. Item 6 stays unchecked until `docs/07-asp-comparison.md` exists.
+- **M7.8 (`docs/07-deployment-tradeoffs.md`, 2026-10-05):** Agent Engine wins on no container,
+  built-in sessions/Memory Bank, flag-level telemetry and per-agent identity; it loses on opaque
+  packaging, the Python 3.11 pin, silent failed deploys and one resource outside Terraform. Cloud
+  Run/GKE comparisons are reasoning only (never deployed). Revisit triggers: unsupported
+  dependency/Python version, networking the config doesn't expose, unmet session/memory needs,
+  measured cost/latency at real traffic, a second agent sharing a pipeline.
 
 ### Module 8
 - **M8.1 (traces to Cloud Trace, local half, 2026-10-05):** `adk web --otel_to_cloud` exports
