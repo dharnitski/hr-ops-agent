@@ -73,7 +73,7 @@ unchecked step.
 - [x] 2. Dashboard: task success, tool error rate, latency, cost/task
 - [x] 3. ~~Model-tier routing (Flash vs. Pro) with measured savings~~ — skipped to save cost
       (2026-10-07 scope decision, see Decisions)
-- [ ] 4. Failure drill + RCA
+- [x] 4. Failure drill + RCA (2026-10-07, `docs/08-failure-drill-rca.md`)
 - [ ] 5. `docs/08-reference-architecture.md`
 - [ ] 6. `docs/08-platform-strategy-memo.md`
 - [ ] 7. `docs/08-roi-cost-model.md`
@@ -742,6 +742,19 @@ been cut; see git history for the blow-by-blow if needed.
 - **M8.3 skipped (2026-10-07):** user chose to skip model-tier routing to avoid the billed
   live runs a Flash-vs-Pro comparison needs. The cost panel stays single-model (flash-lite
   prices); `docs/08-roi-cost-model.md` must state tier-routing savings as unmeasured.
+
+- **M8.4 (failure drill, 2026-10-07):** revoked `roles/run.invoker` for `hr-agent-runtime` on
+  `mcp-server` (targeted destroy, restored by apply; recovery verified with a live probe). RCA
+  in `docs/08-failure-drill-rca.md`. Findings:
+  - The tool-less agent did not degrade quietly: it looped (~75 `load_memory`, 22
+    `transfer_to_agent`), one turn took 112.6s and cost roughly 20x a normal turn (approximate,
+    5-minute buckets). Pre-injection hypothesis was wrong on user behavior, latency and cost.
+  - Tool error rate stayed at zero: a failed MCP toolset load emits no tool result (the 8.2
+    blind spot, now confirmed). Latency p95 (110s hourly) and cost did move, but nothing alerts.
+  - Direct signals existed and were unmonitored: 324 Cloud Run 403s and 324 engine "Failed to
+    create MCP session" ERRORs in about 2 minutes. IAM propagation took seconds.
+  - Action items are open, not implemented (alert policies, per-turn call cap, fail the turn
+    when the toolset can't load, an HCM-unreachable eval, `prevent_destroy` on the binding).
 
 ## Open questions
 
