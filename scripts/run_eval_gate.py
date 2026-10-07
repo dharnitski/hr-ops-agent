@@ -13,6 +13,7 @@ A bounded retry (fresh server each time) absorbs the transient OAuth-token-refre
 MCP-connection-closed failures already documented as occasional, not agent bugs.
 """
 
+import os
 import socket
 import subprocess
 import sys
@@ -23,6 +24,10 @@ MCP_PORT = 8000
 MAX_ATTEMPTS = 3
 STARTUP_TIMEOUT_S = 15.0
 SHUTDOWN_TIMEOUT_S = 10.0
+# Tiers that must see HCM unreachable (M8.4): no MCP server, and the URL points at a port
+# nothing listens on, whatever hr_agent/.env says.
+NO_SERVER_TIERS = frozenset({"hcm_down"})
+DEAD_MCP_URL = "http://127.0.0.1:1/mcp"
 TRANSIENT_MARKERS = ("oauth2.googleapis.com", "Read timed out", "Connection closed")
 
 
@@ -58,17 +63,21 @@ def _stop_server(proc: subprocess.Popen[bytes]) -> None:
 
 
 def run_tier(evalset: Path) -> bool:
+    hcm_down = evalset.parent.name in NO_SERVER_TIERS
+    env = {**os.environ, "HCM_MCP_URL": DEAD_MCP_URL} if hcm_down else None
     for attempt in range(1, MAX_ATTEMPTS + 1):
-        server = _start_server()
+        server = None if hcm_down else _start_server()
         try:
             result = subprocess.run(  # noqa: S603
                 ["uv", "run", "adk", "eval", "hr_agent", str(evalset)],  # noqa: S607
                 capture_output=True,
                 text=True,
                 check=False,
+                env=env,
             )
         finally:
-            _stop_server(server)
+            if server is not None:
+                _stop_server(server)
 
         output = result.stdout + result.stderr
         print(output)

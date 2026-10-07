@@ -27,3 +27,22 @@ variable "price_output_per_mtok_usd" {
   description = "USD per 1M output tokens for the configured model (assumed to include thinking tokens; unverified)."
   default     = 2.50
 }
+
+# Alerting inputs (M8.4 RCA items 1 and 2).
+variable "alert_email" {
+  type        = string
+  description = "Email for alert notifications. Empty creates the policies with no channel: incidents show in the console only."
+  default     = ""
+}
+
+variable "latency_alert_ms" {
+  type        = number
+  description = "Alert when turn latency p95 over 10 minutes exceeds this. Default is the 10s write bar from the launch bar; a cold start (~10s) can trip it."
+  default     = 10000
+}
+
+variable "cost_per_task_alert_usd" {
+  type        = number
+  description = "Alert when cost per task over 10 minutes exceeds this. Default is the $0.02 write bar, about 8x the measured baseline of $0.0026."
+  default     = 0.02
+}

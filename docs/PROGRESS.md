@@ -753,8 +753,19 @@ been cut; see git history for the blow-by-blow if needed.
     blind spot, now confirmed). Latency p95 (110s hourly) and cost did move, but nothing alerts.
   - Direct signals existed and were unmonitored: 324 Cloud Run 403s and 324 engine "Failed to
     create MCP session" ERRORs in about 2 minutes. IAM propagation took seconds.
-  - Action items are open, not implemented (alert policies, per-turn call cap, fail the turn
-    when the toolset can't load, an HCM-unreachable eval, `prevent_destroy` on the binding).
+  - Action items implemented in code (2026-10-07), not yet applied or deployed:
+    `TurnGuardPlugin` (`hr_agent/turn_guard.py`) caps a turn at 12 model calls (unmeasured) and
+    ends it with a fixed message when an agent's MCP tools didn't load, by comparing the model
+    request with the toolsets' `tool_filter`. Both paths log a `turn_aborted` line. Chosen over
+    `RunConfig.max_llm_calls` because ADK's cap raises instead of replying.
+    `deploy/terraform/alerts.tf` adds two log metrics and four alert policies (MCP session
+    failures, aborted turns, latency p95, cost per task) plus a dashboard panel; `plan` shows 6
+    to add, 1 to change, no drift. `alert_email` is empty by default, so incidents are
+    console-only until set. `prevent_destroy` on the invoker binding verified with a targeted
+    `plan -destroy`. New `evals/hcm_down/` tier (2 cases, passed live) runs with no MCP server
+    via `NO_SERVER_TIERS` in the gate script; eval total is 31. Pending: `terraform apply`
+    (user), agent redeploy for the guard, then re-run the drill's probe to confirm the fixed
+    message and an alert firing.
 
 ## Open questions
 

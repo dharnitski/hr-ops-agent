@@ -1,6 +1,7 @@
 # Failure drill and RCA (M8.4)
 
-Status: drill run 2026-10-07; action items open.
+Status: drill run 2026-10-07; all six action items implemented in code. Terraform apply and
+agent redeploy pending (see below).
 
 ## Drill
 
@@ -80,13 +81,27 @@ Systemic, in order of importance:
 
 ## Action items
 
-| # | Item | Closes | Where |
-|---|---|---|---|
-| 1 | Log-based metric on engine ERROR "Failed to create MCP session" plus a Cloud Monitoring alert policy (any occurrence in 5 min), and a dashboard panel for it | Detection gap 1, 3 | `deploy/terraform/monitoring.tf` |
-| 2 | Alert on turn p95 above the 10s bar and on cost per task above a multiple of baseline | Detection gap 2 | `deploy/terraform/monitoring.tf` |
-| 3 | Cap model calls per turn (ADK `RunConfig.max_llm_calls`, or a plugin that aborts after N `load_memory` / transfer calls) and fail the turn with a fixed message | Root cause 1, 2 | `hr_agent/` |
-| 4 | Fail the turn cleanly (not tool-less) when the MCP toolset can't load; user-facing message must not name internal agents | Root cause 1, 4 | `hr_agent/` |
-| 5 | Eval case for "HCM unreachable" once item 4 exists | Regression guard | `evals/` |
-| 6 | Guard the binding: `lifecycle { prevent_destroy = true }` makes a planned destroy of it fail loudly, and a post-apply smoke probe (runbook step) catches changes that slip past | Root cause (technical) | `deploy/terraform/iam.tf`, `docs/07-deployment-procedure.md` |
+| # | Item | Closes | Where | Status |
+|---|---|---|---|---|
+| 1 | Log-based metric on engine ERROR "Failed to create MCP session" plus a Cloud Monitoring alert policy (any occurrence in 5 min), and a dashboard panel for it | Detection gap 1, 3 | `deploy/terraform/alerts.tf`, `monitoring.tf` | Written, plan clean; not applied. Also alerts on turns aborted by item 3/4. |
+| 2 | Alert on turn p95 above the 10s bar and on cost per task above a multiple of baseline | Detection gap 2 | `deploy/terraform/alerts.tf` | Written, plan clean; not applied. Cost threshold $0.02, about 8x the $0.0026 baseline. |
+| 3 | Cap model calls per turn and fail the turn with a fixed message | Root cause 1, 2 | `hr_agent/turn_guard.py` | Done: 12 calls per turn (unmeasured). Needs redeploy. |
+| 4 | Fail the turn cleanly (not tool-less) when the MCP toolset can't load; user-facing message must not name internal agents | Root cause 1, 4 | `hr_agent/turn_guard.py` | Done. Needs redeploy. |
+| 5 | Eval case for "HCM unreachable" once item 4 exists | Regression guard | `evals/hcm_down/`, `scripts/run_eval_gate.py` | Done: 2 cases, passed live (2 of 2). |
+| 6 | Guard the binding: `lifecycle { prevent_destroy = true }` makes a planned destroy of it fail loudly, and a post-apply smoke probe (runbook step) catches changes that slip past | Root cause (technical) | `deploy/terraform/iam.tf`, `docs/07-deployment-procedure.md` | Written; `plan -destroy -target` on the binding now errors. The probe is in the runbook. Not applied. |
 
 Items 1, 3 and 4 are the minimum for a launch.
+
+## Design notes
+
+- **One plugin, not `RunConfig.max_llm_calls`.** ADK's own cap raises, so the user would get an
+  error instead of a message. `TurnGuardPlugin.before_model_callback` returns the fixed reply instead, which ends
+  the turn, and logs a `turn_aborted` line with a reason.
+- **Tool loss is detected by comparing the model request with the agent's own toolset
+  filters**, so no list of tool names is maintained. An agent with no MCP toolset (the router,
+  `policy_agent`) is never blocked.
+- **Aborted turns are an alert source themselves**, independent of the engine's ERROR text, which
+  is ADK's wording and could change.
+- **Not covered:** a partial outage where some toolsets load and others don't is caught (any
+  missing tool aborts), but a server that is up and returning errors is the tool error rate's
+  job, not this guard's.

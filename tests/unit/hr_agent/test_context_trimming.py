@@ -24,6 +24,7 @@ def test_app_configures_the_context_filter_plugin_first() -> None:
     assert {p.__class__.__name__ for p in app.plugins} == {
         "ContextFilterPlugin",
         "AuditLogPlugin",
+        "TurnGuardPlugin",
     }
 
 

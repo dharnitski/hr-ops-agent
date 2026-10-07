@@ -7,6 +7,7 @@ from .agents.policy import policy_agent
 from .agents.pto import pto_agent
 from .audit import AuditLogPlugin
 from .config import MODEL_ID
+from .turn_guard import TurnGuardPlugin
 
 # Module 4.3: without this, every turn resends the full conversation -- every past tool call
 # and result -- to the model forever. Keeps the last 6 user-initiated invocations (roughly a
@@ -50,5 +51,6 @@ app = App(
     plugins=[
         ContextFilterPlugin(num_invocations_to_keep=NUM_INVOCATIONS_TO_KEEP),
         AuditLogPlugin(),
+        TurnGuardPlugin(),
     ],
 )

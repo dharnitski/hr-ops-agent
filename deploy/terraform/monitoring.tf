@@ -249,6 +249,36 @@ resource "google_monitoring_dashboard" "launch_bar" {
             }
           }
         },
+        {
+          yPos = 12, width = 12, height = 4
+          widget = {
+            title = "HCM lost: MCP session failures and aborted turns"
+            xyChart = {
+              dataSets = [{
+                targetAxis     = "Y1"
+                plotType       = "STACKED_BAR"
+                legendTemplate = "MCP session failures"
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter      = "metric.type=\"${local.mcp_session_failures}\" ${local.engine_resource}"
+                    aggregation = { alignmentPeriod = "3600s", perSeriesAligner = "ALIGN_DELTA", crossSeriesReducer = "REDUCE_SUM" }
+                  }
+                }
+                }, {
+                targetAxis     = "Y1"
+                plotType       = "STACKED_BAR"
+                legendTemplate = "aborted turns"
+                timeSeriesQuery = {
+                  timeSeriesFilter = {
+                    filter      = "metric.type=\"${local.turns_aborted}\" ${local.engine_resource}"
+                    aggregation = { alignmentPeriod = "3600s", perSeriesAligner = "ALIGN_DELTA", crossSeriesReducer = "REDUCE_SUM", groupByFields = ["metric.label.\"reason\""] }
+                  }
+                }
+              }]
+              yAxis = { scale = "LINEAR" }
+            }
+          }
+        },
       ]
     }
   })
