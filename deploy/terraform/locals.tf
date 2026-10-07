@@ -5,6 +5,8 @@ locals {
     "cloudbuild.googleapis.com",
     "cloudresourcemanager.googleapis.com",
     "iam.googleapis.com",
+    "logging.googleapis.com",
+    "monitoring.googleapis.com",
     "run.googleapis.com",
     "serviceusage.googleapis.com",
   ]

@@ -5,9 +5,11 @@ emitted record, not just "a log call happened", is what these tests need to chec
 
 import logging
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+from google.adk.agents.invocation_context import InvocationContext
 from google.adk.tools import ToolContext
 
 from hr_agent.audit import AUDIT_LOGGER_NAME, AuditLogPlugin, _unwrap_tool_result
@@ -209,3 +211,29 @@ async def test_record_includes_invocation_and_session_ids(
     assert record["invocation_id"] == "test-invocation"
     assert record["session_id"]
     assert record["timestamp"]
+
+
+def _fake_invocation(invocation_id: str = "e-1") -> InvocationContext:
+    fake = SimpleNamespace(invocation_id=invocation_id, session=SimpleNamespace(id="s-1"))
+    return cast(InvocationContext, cast(object, fake))
+
+
+async def test_turn_complete_logs_duration_and_ids_only(
+    plugin: AuditLogPlugin, caplog: pytest.LogCaptureFixture
+) -> None:
+    ctx = _fake_invocation()
+    assert await plugin.before_run_callback(invocation_context=ctx) is None
+    await plugin.after_run_callback(invocation_context=ctx)
+
+    record = _last_record(caplog)
+    assert record["event"] == "turn_complete"
+    assert set(record) == {"timestamp", "event", "invocation_id", "session_id", "duration_ms"}
+    assert isinstance(record["duration_ms"], int)
+    assert record["duration_ms"] >= 0
+
+
+async def test_turn_complete_not_logged_without_a_start(
+    plugin: AuditLogPlugin, caplog: pytest.LogCaptureFixture
+) -> None:
+    await plugin.after_run_callback(invocation_context=_fake_invocation())
+    assert caplog.records == []

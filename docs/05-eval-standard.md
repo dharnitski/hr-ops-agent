@@ -71,8 +71,8 @@ Four dimensions; only one is mechanically gated today.
 |---|---|---|
 | Task success | All 29 cases pass their tier's criteria | On demand only — `scripts/run_eval_gate.py` via manual `workflow_dispatch` (live, billed model calls); not on PRs |
 | Zero unauthorized access | Zero tolerance | Not by evals — enforcement is server-side (caller-identity, self-only and role checks, Module 6) and covered by `mcp_server` unit tests. Cases seed `caller_employee_id` but none asserts `forbidden` (e.g. a different, valid employee ID, or a wrong-role payroll caller) against the live agent. Documented gap. |
-| p95 latency | <5s read turn, <10s write turn | No — no instrumentation exists (Module 8). Unmeasured starting floor. |
-| Cost/task | <$0.01 read, <$0.02 write on the configured Flash tier | No — no cost tracking exists (Module 8). Unmeasured starting floor. |
+| p95 latency | <5s read turn, <10s write turn | No — measured on the dashboard (`docs/08-dashboard.md`), alert-only. Unmeasured starting floor; the dashboard can't split read from write turns. |
+| Cost/task | <$0.01 read, <$0.02 write on the configured Flash tier | No — measured on the dashboard (`docs/08-dashboard.md`), alert-only. First reading ~$0.0026/turn on 9 mixed turns. |
 
 Task success is a fixed regression suite, not a sampled rate — "all cases pass," not "N%
 pass." Do not treat this table's unenforced rows as silently satisfied; they are open blockers on
