@@ -71,7 +71,8 @@ unchecked step.
 ## Module 8 — Observability, cost, Staff-level artifacts
 - [x] 1. OpenTelemetry traces to Cloud Trace (local and deployed, 2026-10-05)
 - [x] 2. Dashboard: task success, tool error rate, latency, cost/task
-- [ ] 3. Model-tier routing (Flash vs. Pro) with measured savings
+- [x] 3. ~~Model-tier routing (Flash vs. Pro) with measured savings~~ — skipped to save cost
+      (2026-10-07 scope decision, see Decisions)
 - [ ] 4. Failure drill + RCA
 - [ ] 5. `docs/08-reference-architecture.md`
 - [ ] 6. `docs/08-platform-strategy-memo.md`
@@ -737,6 +738,10 @@ been cut; see git history for the blow-by-blow if needed.
   - **Open:** after the redeploy the resource lost `OTEL_SEMCONV_STABILITY_OPT_IN` and
     `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` (7 env vars, was 9). The trace list API
     returned nothing, so span content was not re-checked; verify in the Cloud Trace console.
+
+- **M8.3 skipped (2026-10-07):** user chose to skip model-tier routing to avoid the billed
+  live runs a Flash-vs-Pro comparison needs. The cost panel stays single-model (flash-lite
+  prices); `docs/08-roi-cost-model.md` must state tier-routing savings as unmeasured.
 
 ## Open questions
 
