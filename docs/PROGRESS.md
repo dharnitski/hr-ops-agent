@@ -70,7 +70,7 @@ unchecked step.
 
 ## Module 8 — Observability, cost, Staff-level artifacts
 - [x] 1. OpenTelemetry traces to Cloud Trace (local and deployed, 2026-10-05)
-- [ ] 2. Dashboard: task success, tool error rate, latency, cost/task
+- [x] 2. Dashboard: task success, tool error rate, latency, cost/task
 - [ ] 3. Model-tier routing (Flash vs. Pro) with measured savings
 - [ ] 4. Failure drill + RCA
 - [ ] 5. `docs/08-reference-architecture.md`
@@ -709,6 +709,34 @@ been cut; see git history for the blow-by-blow if needed.
   but as a separate trace, not a child of the agent's -- confirms no `traceparent`
   propagation. Metrics/logs writer roles were left out on purpose (`--otel_to_cloud` enables
   those exporters too, so 403s may appear in runtime logs until 8.2 adds them).
+- **M8.2 (launch-bar dashboard, 2026-10-06):** `deploy/terraform/monitoring.tf` (dashboard plus
+  two log-based metrics); sources, definitions and blind spots per panel are in
+  `docs/08-dashboard.md`. Decisions:
+  - **Sources differ per panel.** Tool error rate and turn latency come from `AuditLogPlugin`
+    stderr lines (allowlisted labels only); cost from OTel token/duration metrics via PromQL.
+    Task success has no online ground truth: the request-success panel is a proxy, the eval gate
+    stays the real measure.
+  - **Platform `request_latencies` rejected** after a clean single-turn test (264ms for a turn
+    measured at 1.7s first byte / 3.65s total). Replaced by a `turn_complete` log line
+    (`AuditLogPlugin.after_run_callback`) feeding a distribution metric. Verified: 9 of 9 turns
+    logged, durations 1.95-6.82s, panel p95 6,463ms.
+  - **A task is one user turn = all `invoke_agent` counts - `transfer_to_agent` calls.** Root-agent
+    count gave 5 for 9 turns because follow-up turns resume in the last specialist and skip the
+    router; the formula gave 9 of 9.
+  - **Cost** = tokens x flash-lite prices ($0.30/$2.50 per 1M, Terraform variables). First reading
+    $0.0026/turn on 9 mixed turns, matching a hand calculation. Unverified: that output tokens
+    include thinking.
+  - **IAM:** `roles/monitoring.metricWriter` added to `hr-agent-runtime` (the deployed OTel metrics
+    export was 403). The OTel *logs* export still 403s; left alone since stderr already reaches
+    Logging.
+  - Error rate excludes `forbidden` (the guardrail working) and `transfer_to_agent` (no status);
+    exceptions are a second line because a filter can't mix AND/OR on labels.
+  - **Found, not fixed:** a failed MCP tool load ("Session not found", agent then runs without
+    tools) logs no tool result, so the error panel can't see it. Recurs on 6 days since 09-29;
+    spun off as its own task along with a repeating MCP `GET` 401 reconnect loop.
+  - **Open:** after the redeploy the resource lost `OTEL_SEMCONV_STABILITY_OPT_IN` and
+    `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` (7 env vars, was 9). The trace list API
+    returned nothing, so span content was not re-checked; verify in the Cloud Trace console.
 
 ## Open questions
 

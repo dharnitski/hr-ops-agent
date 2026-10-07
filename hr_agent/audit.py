@@ -9,12 +9,15 @@ own calls."""
 from __future__ import annotations
 
 import logging
+import time
 from datetime import UTC, datetime
 from typing import Any
 
+from google.adk.agents.invocation_context import InvocationContext
 from google.adk.plugins.base_plugin import BasePlugin
 from google.adk.tools.base_tool import BaseTool
 from google.adk.tools.tool_context import ToolContext
+from google.genai import types
 
 # Not `from typing import override` (stdlib since 3.12, and what ruff's UP035 wants for this
 # project's local/CI target of 3.14): Agent Engine's managed runtime pins Python 3.11
@@ -68,6 +71,32 @@ class AuditLogPlugin(BasePlugin):
 
     def __init__(self, name: str = "audit_log_plugin") -> None:
         super().__init__(name)
+        self._turn_started: dict[str, float] = {}
+
+    @override
+    async def before_run_callback(
+        self, *, invocation_context: InvocationContext
+    ) -> types.Content | None:
+        self._turn_started[invocation_context.invocation_id] = time.monotonic()
+        return None
+
+    @override
+    async def after_run_callback(self, *, invocation_context: InvocationContext) -> None:
+        """One `turn_complete` line per user turn with its wall-clock duration. Feeds the
+        dashboard's turn-latency p95 (the platform's own request-latency metric does not
+        measure the turn) and gives an exact task count. A turn that raises is not logged."""
+        started = self._turn_started.pop(invocation_context.invocation_id, None)
+        if started is None:
+            return
+        audit_logger.info(
+            {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "event": "turn_complete",
+                "invocation_id": invocation_context.invocation_id,
+                "session_id": invocation_context.session.id,
+                "duration_ms": round((time.monotonic() - started) * 1000),
+            }
+        )
 
     @override
     async def before_tool_callback(

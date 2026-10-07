@@ -131,6 +131,15 @@ it matters (env var choices, model IDs, import paths).
   `--otel_to_cloud` (`adk web`, `adk deploy agent_engine`). Locally it needs `google-adk[gcp,
   otel-gcp]`. Spans carry prompts and tool results by default; set
   `ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=false` (this repo does in `hr_agent/config.py`).
+- **Monitoring as code (hands-on 2026-10-06):** `POST .../v1/projects/P/dashboards?validateOnly=true`
+  validates dashboard JSON without creating it (the provider only reports errors one apply at
+  a time). `xyChart` thresholds accept only `value`/`label`/`targetAxis`, not `color` or
+  `direction`; the API drops zero `xPos`/`yPos` and adds `targetAxis: "Y1"`, so set those to
+  match or the plan never settles. OTel metrics land as `prometheus.googleapis.com/<otel.name>/histogram`
+  and PromQL needs the UTF-8 form: `{"gen_ai.client.token.usage_sum","gen_ai.token.type"="input"}`
+  (query via `monitoring.googleapis.com/v1/projects/P/location/global/prometheus/api/v1/query`).
+  Deployed export needs `roles/monitoring.metricWriter`. `reasoning_engine/request_latencies`
+  read 264ms for a 3.65s streamed turn, so don't use it as turn latency.
 
 ## Module 1 — Foundations and first ADK agent
 
