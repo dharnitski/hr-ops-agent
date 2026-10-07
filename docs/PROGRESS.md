@@ -732,7 +732,7 @@ been cut; see git history for the blow-by-blow if needed.
     Logging.
   - Error rate excludes `forbidden` (the guardrail working) and `transfer_to_agent` (no status);
     exceptions are a second line because a filter can't mix AND/OR on labels.
-  - **Found, not fixed:** a failed MCP tool load ("Session not found", agent then runs without
+  - **Found, not fixed (fixed in M8.4):** a failed MCP tool load ("Session not found", agent then runs without
     tools) logs no tool result, so the error panel can't see it. Recurs on 6 days since 09-29;
     spun off as its own task along with a repeating MCP `GET` 401 reconnect loop.
   - **Open:** after the redeploy the resource lost `OTEL_SEMCONV_STABILITY_OPT_IN` and
@@ -766,6 +766,22 @@ been cut; see git history for the blow-by-blow if needed.
     via `NO_SERVER_TIERS` in the gate script; eval total is 31. Pending: `terraform apply`
     (user), agent redeploy for the guard, then re-run the drill's probe to confirm the fixed
     message and an alert firing.
+  - **Deployed (2026-10-07, user ran apply and redeploy):** env vars, identity, metrics and 4
+    alert policies verified; `plan` clean; 4 of 4 healthy probes fired the tools. The first
+    probe, the first request after a Cloud Run cold start, was aborted by the guard: ADK's
+    `list_tools` got `Session not found` (the M8.2 flake) and retried once, failing again. So
+    the guard works live, and a silent failure became a visible one. That failure logs no
+    "Failed to create MCP session" ERROR, so only the turns-aborted alert catches it.
+  - **Root cause and fix:** `mcp_server` kept MCP sessions in one instance's memory while Cloud
+    Run runs 0 to 2 instances. `main()` now passes `stateless_http=True`; no session ID is
+    issued, and caller identity, idempotency and rate limits never depended on the session.
+    Checked locally first: ADK's client lists tools and calls through a stateless server, and
+    self-only, `forbidden` and fail-closed behavior are unchanged. The write path with its
+    confirmation pause passed live (3 cases) against it. **Not yet verified:** the cold-start
+    fix on Cloud Run with several instances; needs an `mcp_server` redeploy (runbook).
+  - **Pre-existing, not from this change:** `test_agent_mcp_live.py::
+    test_submit_pto_sends_idempotency_key` fails on the committed code: it expects "pending" in
+    the reply, but the turn now pauses for confirmation (M6.2) and has no text.
 
 ## Open questions
 
