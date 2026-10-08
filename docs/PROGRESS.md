@@ -782,9 +782,9 @@ been cut; see git history for the blow-by-blow if needed.
     sessions fired the tools, with no `Session not found` and no `turn_aborted` in the logs
     (the first probe is the cold-start case that failed before). One cold start is thin
     evidence: a concurrent load across both instances was not tried. Image tag is now `v2`.
-  - **Pre-existing, not from this change:** `test_agent_mcp_live.py::
-    test_submit_pto_sends_idempotency_key` fails on the committed code: it expects "pending" in
-    the reply, but the turn now pauses for confirmation (M6.2) and has no text.
+  - **Stale test fixed:** `test_agent_mcp_live.py::test_submit_pto_sends_idempotency_key`
+    failed on `main` too: it expected "pending" in the reply, but the turn pauses for
+    confirmation (M6.2) and has no text. It now asserts the pause; 3 of 3 runs pass.
 
 ## Open questions
 

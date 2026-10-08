@@ -26,7 +26,9 @@ async def test_submit_pto_sends_idempotency_key(ask: Ask) -> None:
     assert submits[0]["start_date"] == "2026-10-12"
     assert submits[0]["end_date"] == "2026-10-14"
     assert submits[0]["idempotency_key"]
-    assert "pending" in turn.text.lower()
+    # The write pauses for confirmation (M6.2), so the turn ends with no reply text. Resuming
+    # is covered by test_pto_confirmation_live.py.
+    assert "adk_request_confirmation" in [name for name, _ in turn.tool_calls]
 
 
 async def test_individual_pay_is_refused(ask: Ask) -> None:
