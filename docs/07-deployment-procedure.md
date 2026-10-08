@@ -57,7 +57,7 @@ Only the image is passed: scaling, port, ingress, env and identity are owned by
 `deploy/terraform/cloud_run.tf`, so don't repeat them here (a flag here would drift from
 Terraform). Terraform ignores the image after creation, so this deploy and `terraform plan`
 don't fight.
-The image tag (`:v1` above) doesn't bump itself — pick a new tag per real change, or `gcloud
+The image tag (`:v2` above) doesn't bump itself — pick a new tag per real change, or `gcloud
 run deploy` will happily redeploy the exact same image again. `deploy/cloud_run/cloudbuild.yaml`
 exists only because `mcp_server.Dockerfile` isn't literally named `Dockerfile` at the repo
 root — `gcloud builds submit --tag` can't find it otherwise.
