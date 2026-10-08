@@ -45,11 +45,11 @@ Whenever `mcp_server/` changes. Builds via Cloud Build — no local Docker daemo
 ```bash
 gcloud builds submit \
   --config=deploy/cloud_run/cloudbuild.yaml \
-  --substitutions=_IMAGE=us-central1-docker.pkg.dev/hr-ops-agent-509718/hr-ops-agent/mcp-server:v1 \
+  --substitutions=_IMAGE=us-central1-docker.pkg.dev/hr-ops-agent-509718/hr-ops-agent/mcp-server:v2 \
   --project=hr-ops-agent-509718 .
 
 gcloud run deploy mcp-server \
-  --image=us-central1-docker.pkg.dev/hr-ops-agent-509718/hr-ops-agent/mcp-server:v1 \
+  --image=us-central1-docker.pkg.dev/hr-ops-agent-509718/hr-ops-agent/mcp-server:v2 \
   --region=us-central1 --project=hr-ops-agent-509718
 ```
 

@@ -777,8 +777,11 @@ been cut; see git history for the blow-by-blow if needed.
     issued, and caller identity, idempotency and rate limits never depended on the session.
     Checked locally first: ADK's client lists tools and calls through a stateless server, and
     self-only, `forbidden` and fail-closed behavior are unchanged. The write path with its
-    confirmation pause passed live (3 cases) against it. **Not yet verified:** the cold-start
-    fix on Cloud Run with several instances; needs an `mcp_server` redeploy (runbook).
+    confirmation pause passed live (3 cases) against it. Redeployed as image `v2`, revision
+    `mcp-server-00004-9vx`; `plan` clean. Right after the revision change, 6 of 6 fresh
+    sessions fired the tools, with no `Session not found` and no `turn_aborted` in the logs
+    (the first probe is the cold-start case that failed before). One cold start is thin
+    evidence: a concurrent load across both instances was not tried. Image tag is now `v2`.
   - **Pre-existing, not from this change:** `test_agent_mcp_live.py::
     test_submit_pto_sends_idempotency_key` fails on the committed code: it expects "pending" in
     the reply, but the turn now pauses for confirmation (M6.2) and has no text.
