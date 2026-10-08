@@ -192,6 +192,12 @@ def main() -> None:
     Cloud Run: injects `PORT`; `HOST=0.0.0.0` and `MCP_ALLOWED_HOSTS` (the service's own
     hostname, comma-separated if there's more than one) must be set explicitly -- Cloud Run
     IAM decides *who* may call in, this decides what Host header the server itself accepts.
+
+    Always stateless: Cloud Run scales to zero and across instances, and a stateful session
+    lives in one instance's memory, so a request landing elsewhere got "Session not found"
+    and the agent ran without its tools (M8.4). Nothing here depends on a session: caller
+    identity is a per-request header, and the idempotency and rate-limit stores are module
+    state, not session state.
     """
     host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "8000"))
@@ -207,6 +213,7 @@ def main() -> None:
         host=host,
         port=port,
         transport_security=transport_security,
+        stateless_http=True,
     )
 
 

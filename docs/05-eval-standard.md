@@ -5,7 +5,7 @@
 
 ## Structure
 
-`evals/{happy_path,ambiguous,adversarial}/` — one `.evalset.json` plus one `test_config.json`
+`evals/{happy_path,ambiguous,adversarial,hcm_down}/` — one `.evalset.json` plus one `test_config.json`
 per tier. Each tier gets its own trajectory-matching strictness because the property each
 tier is meant to guarantee is different:
 
@@ -18,6 +18,11 @@ tier is meant to guarantee is different:
   *no unexpected extra calls* — a silent retry, a bulk lookup triggered by a prompt-injection
   attempt, a second write after the first should have been rejected. `EXACT`'s job here is
   catching absence of extras, not just presence of the required ones.
+- **`hcm_down`** (2 cases): `EXACT` + `ignore_args: true`, plus `response_match_score` 0.8
+  because the reply is a fixed string. The gate runs this tier with **no MCP server** and
+  `HCM_MCP_URL` pointed at a dead port (`NO_SERVER_TIERS` in `scripts/run_eval_gate.py`).
+  Expects `transfer_to_agent` and the turn guard's unavailable message, with no retries or
+  loops (M8.4). Only the router hop calls the model.
 - **`ignore_args: true` everywhere**: `submit_pto_request`'s `idempotency_key` is
   model-generated and unpredictable, so exact-arg matching would fail cases it shouldn't.
   Argument-level correctness (right employee, right dates, right hours) is pushed onto
@@ -69,7 +74,7 @@ Four dimensions; only one is mechanically gated today.
 
 | Dimension | Bar | Enforced by CI today? |
 |---|---|---|
-| Task success | All 29 cases pass their tier's criteria | On demand only — `scripts/run_eval_gate.py` via manual `workflow_dispatch` (live, billed model calls); not on PRs |
+| Task success | All 31 cases pass their tier's criteria | On demand only — `scripts/run_eval_gate.py` via manual `workflow_dispatch` (live, billed model calls); not on PRs |
 | Zero unauthorized access | Zero tolerance | Not by evals — enforcement is server-side (caller-identity, self-only and role checks, Module 6) and covered by `mcp_server` unit tests. Cases seed `caller_employee_id` but none asserts `forbidden` (e.g. a different, valid employee ID, or a wrong-role payroll caller) against the live agent. Documented gap. |
 | p95 latency | <5s read turn, <10s write turn | No — measured on the dashboard (`docs/08-dashboard.md`), alert-only. Unmeasured starting floor; the dashboard can't split read from write turns. |
 | Cost/task | <$0.01 read, <$0.02 write on the configured Flash tier | No — measured on the dashboard (`docs/08-dashboard.md`), alert-only. First reading ~$0.0026/turn on 9 mixed turns. |

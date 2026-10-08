@@ -3,6 +3,7 @@
 import uuid
 from typing import Any
 
+import httpx
 import pytest
 from mcp import Client
 from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
@@ -189,3 +190,42 @@ async def test_submit_pto_over_blast_radius_limit_over_http() -> None:
     is_error, result = await _call("submit_pto_request", args, caller_employee_id="E1001")
     assert not is_error
     assert result["result"]["code"] == "exceeds_limit"
+
+
+async def test_server_is_stateless_over_http() -> None:
+    """No session ID is issued, and a call needs no prior initialize: a request may land on
+    any Cloud Run instance (M8.4)."""
+    headers = {
+        "content-type": "application/json",
+        "accept": "application/json, text/event-stream",
+        "x-caller-employee-id": "E1002",
+    }
+    async with httpx.AsyncClient() as http:
+        init = await http.post(
+            URL,
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "it", "version": "1"},
+                },
+            },
+        )
+        call = await http.post(
+            URL,
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "get_pto_balance", "arguments": {"employee_id": "E1002"}},
+            },
+        )
+    assert init.status_code == 200
+    assert "mcp-session-id" not in init.headers
+    assert call.status_code == 200
+    assert "64.5" in call.text

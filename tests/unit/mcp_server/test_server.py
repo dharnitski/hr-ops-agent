@@ -12,7 +12,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult
 from pydantic import TypeAdapter
 
-from mcp_server import handlers
+from mcp_server import handlers, server
 from mcp_server.handlers import IsoDate
 from mcp_server.server import mcp
 
@@ -308,3 +308,14 @@ def test_misspelled_write_argument_creates_nothing() -> None:
     with pytest.raises(ToolError, match="Extra inputs are not permitted"):
         asyncio.run(mcp.call_tool("submit_pto_request", args))
     assert not handlers._pto_requests
+
+
+def test_main_runs_stateless(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A stateful server loses its sessions when Cloud Run changes instance (M8.4).
+    calls: list[dict[str, Any]] = []
+    monkeypatch.setattr(mcp, "run", lambda **kwargs: calls.append(kwargs))
+
+    server.main()
+
+    assert len(calls) == 1
+    assert calls[0]["stateless_http"] is True

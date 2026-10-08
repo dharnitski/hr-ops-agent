@@ -30,6 +30,10 @@ cd deploy/terraform
 terraform init && terraform apply -var-file=vars/env.tfvars
 ```
 
+The `roles/run.invoker` binding for `hr-agent-runtime` has `prevent_destroy`, so a plan that
+removes it fails (M8.4). To change it on purpose, remove the `lifecycle` block in a reviewed
+change first.
+
 State is local and gitignored. An agent session can't run `apply` (blocked by this project's
 permission classifier); run it yourself. Passing `-auto-approve` is needed if you launch it
 from a non-interactive shell.
@@ -41,11 +45,11 @@ Whenever `mcp_server/` changes. Builds via Cloud Build — no local Docker daemo
 ```bash
 gcloud builds submit \
   --config=deploy/cloud_run/cloudbuild.yaml \
-  --substitutions=_IMAGE=us-central1-docker.pkg.dev/hr-ops-agent-509718/hr-ops-agent/mcp-server:v1 \
+  --substitutions=_IMAGE=us-central1-docker.pkg.dev/hr-ops-agent-509718/hr-ops-agent/mcp-server:v2 \
   --project=hr-ops-agent-509718 .
 
 gcloud run deploy mcp-server \
-  --image=us-central1-docker.pkg.dev/hr-ops-agent-509718/hr-ops-agent/mcp-server:v1 \
+  --image=us-central1-docker.pkg.dev/hr-ops-agent-509718/hr-ops-agent/mcp-server:v2 \
   --region=us-central1 --project=hr-ops-agent-509718
 ```
 
@@ -53,7 +57,7 @@ Only the image is passed: scaling, port, ingress, env and identity are owned by
 `deploy/terraform/cloud_run.tf`, so don't repeat them here (a flag here would drift from
 Terraform). Terraform ignores the image after creation, so this deploy and `terraform plan`
 don't fight.
-The image tag (`:v1` above) doesn't bump itself — pick a new tag per real change, or `gcloud
+The image tag (`:v2` above) doesn't bump itself — pick a new tag per real change, or `gcloud
 run deploy` will happily redeploy the exact same image again. `deploy/cloud_run/cloudbuild.yaml`
 exists only because `mcp_server.Dockerfile` isn't literally named `Dockerfile` at the repo
 root — `gcloud builds submit --tag` can't find it otherwise.
@@ -153,6 +157,11 @@ Expect a request for an employee ID (no caller identity yet — see `identify_ca
 `docs/PROGRESS.md`'s Module 6 decisions); a follow-up call with `"message": "My employee ID is
 E1002"` on the same `$SESSION` should then show `identify_caller` and `get_pto_balance` both
 firing, with a real balance in the final text.
+
+Run this probe after every `terraform apply` and every redeploy, not only after agent
+changes: IAM and network changes break the agent without touching its code (M8.4 drill). The
+reply "I can't reach the HR system right now" means `mcp-server` is unreachable; check the
+invoker binding and Cloud Run first.
 
 **3. Check Cloud Logging directly if something's wrong** — the Cloud Console log viewer can
 surface a stale cached entry from a previous failure. Cross-check against the resource's own

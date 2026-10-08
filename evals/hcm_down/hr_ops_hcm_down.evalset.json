@@ -1,0 +1,87 @@
+{
+  "eval_set_id": "hr_ops_hcm_down",
+  "name": "HR Ops HCM unreachable",
+  "description": "HCM (MCP server) unreachable: the turn must end with the fixed unavailable message after the router hop, with no tool calls, retries or loops, and no internal agent names (M8.4 RCA item 5). Run by scripts/run_eval_gate.py without an MCP server.",
+  "eval_cases": [
+    {
+      "eval_id": "hcm_down_pto_balance",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "How much PTO do I have left? My employee ID is E1002."
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "I can't reach the HR system right now, so I can't look that up or submit requests. Please try again in a few minutes."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "transfer_to_agent",
+                "args": {
+                  "agent_name": "pto_agent"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1002"
+        }
+      }
+    },
+    {
+      "eval_id": "hcm_down_pto_request",
+      "conversation": [
+        {
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Please submit PTO for me from 2026-11-02 to 2026-11-04. My employee ID is E1002."
+              }
+            ]
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "I can't reach the HR system right now, so I can't look that up or submit requests. Please try again in a few minutes."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "transfer_to_agent",
+                "args": {
+                  "agent_name": "pto_agent"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1002"
+        }
+      }
+    }
+  ]
+}

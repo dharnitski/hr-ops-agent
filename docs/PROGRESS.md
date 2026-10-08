@@ -732,7 +732,7 @@ been cut; see git history for the blow-by-blow if needed.
     Logging.
   - Error rate excludes `forbidden` (the guardrail working) and `transfer_to_agent` (no status);
     exceptions are a second line because a filter can't mix AND/OR on labels.
-  - **Found, not fixed:** a failed MCP tool load ("Session not found", agent then runs without
+  - **Found, not fixed (fixed in M8.4):** a failed MCP tool load ("Session not found", agent then runs without
     tools) logs no tool result, so the error panel can't see it. Recurs on 6 days since 09-29;
     spun off as its own task along with a repeating MCP `GET` 401 reconnect loop.
   - **Open:** after the redeploy the resource lost `OTEL_SEMCONV_STABILITY_OPT_IN` and
@@ -753,8 +753,38 @@ been cut; see git history for the blow-by-blow if needed.
     blind spot, now confirmed). Latency p95 (110s hourly) and cost did move, but nothing alerts.
   - Direct signals existed and were unmonitored: 324 Cloud Run 403s and 324 engine "Failed to
     create MCP session" ERRORs in about 2 minutes. IAM propagation took seconds.
-  - Action items are open, not implemented (alert policies, per-turn call cap, fail the turn
-    when the toolset can't load, an HCM-unreachable eval, `prevent_destroy` on the binding).
+  - Action items implemented in code (2026-10-07), not yet applied or deployed:
+    `TurnGuardPlugin` (`hr_agent/turn_guard.py`) caps a turn at 12 model calls (unmeasured) and
+    ends it with a fixed message when an agent's MCP tools didn't load, by comparing the model
+    request with the toolsets' `tool_filter`. Both paths log a `turn_aborted` line. Chosen over
+    `RunConfig.max_llm_calls` because ADK's cap raises instead of replying.
+    `deploy/terraform/alerts.tf` adds two log metrics and four alert policies (MCP session
+    failures, aborted turns, latency p95, cost per task) plus a dashboard panel; `plan` shows 6
+    to add, 1 to change, no drift. `alert_email` is empty by default, so incidents are
+    console-only until set. `prevent_destroy` on the invoker binding verified with a targeted
+    `plan -destroy`. New `evals/hcm_down/` tier (2 cases, passed live) runs with no MCP server
+    via `NO_SERVER_TIERS` in the gate script; eval total is 31. Pending: `terraform apply`
+    (user), agent redeploy for the guard, then re-run the drill's probe to confirm the fixed
+    message and an alert firing.
+  - **Deployed (2026-10-07, user ran apply and redeploy):** env vars, identity, metrics and 4
+    alert policies verified; `plan` clean; 4 of 4 healthy probes fired the tools. The first
+    probe, the first request after a Cloud Run cold start, was aborted by the guard: ADK's
+    `list_tools` got `Session not found` (the M8.2 flake) and retried once, failing again. So
+    the guard works live, and a silent failure became a visible one. That failure logs no
+    "Failed to create MCP session" ERROR, so only the turns-aborted alert catches it.
+  - **Root cause and fix:** `mcp_server` kept MCP sessions in one instance's memory while Cloud
+    Run runs 0 to 2 instances. `main()` now passes `stateless_http=True`; no session ID is
+    issued, and caller identity, idempotency and rate limits never depended on the session.
+    Checked locally first: ADK's client lists tools and calls through a stateless server, and
+    self-only, `forbidden` and fail-closed behavior are unchanged. The write path with its
+    confirmation pause passed live (3 cases) against it. Redeployed as image `v2`, revision
+    `mcp-server-00004-9vx`; `plan` clean. Right after the revision change, 6 of 6 fresh
+    sessions fired the tools, with no `Session not found` and no `turn_aborted` in the logs
+    (the first probe is the cold-start case that failed before). One cold start is thin
+    evidence: a concurrent load across both instances was not tried. Image tag is now `v2`.
+  - **Pre-existing, not from this change:** `test_agent_mcp_live.py::
+    test_submit_pto_sends_idempotency_key` fails on the committed code: it expects "pending" in
+    the reply, but the turn now pauses for confirmation (M6.2) and has no text.
 
 ## Open questions
 
