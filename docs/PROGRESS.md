@@ -75,8 +75,8 @@ unchecked step.
       (2026-10-07 scope decision, see Decisions)
 - [x] 4. Failure drill + RCA (2026-10-07, `docs/08-failure-drill-rca.md`)
 - [x] 5. `docs/08-reference-architecture.md` (2026-10-10)
-- [ ] 6. `docs/08-platform-strategy-memo.md`
-- [ ] 7. `docs/08-roi-cost-model.md`
+- [x] 6. `docs/08-platform-strategy-memo.md` (2026-10-10)
+- [x] 7. `docs/08-roi-cost-model.md` (2026-10-10)
 
 ---
 
@@ -794,6 +794,18 @@ been cut; see git history for the blow-by-blow if needed.
   the identity claim is protected only by that single invoker SA and the agent's header
   provider; real auth must replace `identify_caller` before this is more than a demo. Drafted
   at the learner's request ("implement"), not hand-written.
+
+- **M8.6/M8.7 (strategy memo and ROI model, 2026-10-10, drafted at the learner's request, one
+  change):** `docs/08-platform-strategy-memo.md` recommends a hybrid: own the MCP tool layer and
+  the eval/guardrail standards, rent the runtime and model, and evaluate the HCM vendor's
+  built-in assistant against our launch bar before building commodity self-service. Gated
+  roadmap with a stop rule at the 9-month gate. `docs/08-roi-cost-model.md` finds inference is
+  about 1% of cost at 20,000 employees; the cost is engineering time, and break-even is about
+  7,500 employees. That also shows the skipped tier routing (M8.3) could not have changed the
+  result. Only cost per turn ($0.0026) and latency are measured; deflection, inquiry cost,
+  build and maintenance cost are assumptions. Agent Engine runtime rates could not be
+  verified against the official page (third-party sources disagree), so runtime is given as an
+  upper bound and flagged. Module 8 checklist is complete.
 
 ## Open questions
 
