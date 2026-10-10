@@ -74,7 +74,7 @@ unchecked step.
 - [x] 3. ~~Model-tier routing (Flash vs. Pro) with measured savings~~ — skipped to save cost
       (2026-10-07 scope decision, see Decisions)
 - [x] 4. Failure drill + RCA (2026-10-07, `docs/08-failure-drill-rca.md`)
-- [ ] 5. `docs/08-reference-architecture.md`
+- [x] 5. `docs/08-reference-architecture.md` (2026-10-10)
 - [ ] 6. `docs/08-platform-strategy-memo.md`
 - [ ] 7. `docs/08-roi-cost-model.md`
 
@@ -785,6 +785,15 @@ been cut; see git history for the blow-by-blow if needed.
   - **Pre-existing, not from this change:** `test_agent_mcp_live.py::
     test_submit_pto_sends_idempotency_key` fails on the committed code: it expects "pending" in
     the reply, but the turn now pauses for confirmation (M6.2) and has no text.
+
+- **M8.5 (reference architecture, 2026-10-10):** `docs/08-reference-architecture.md` covers trust
+  boundaries per hop, one PTO write traced through every check in order, a hard/soft control
+  table with bypasses, rejected alternatives, scale limits and a fork checklist. It complements
+  `docs/03-architecture.md` (agent topology) rather than repeating it. Finding made explicit
+  while writing: the server trusts `x-caller-employee-id` from any holder of `run.invoker`, so
+  the identity claim is protected only by that single invoker SA and the agent's header
+  provider; real auth must replace `identify_caller` before this is more than a demo. Drafted
+  at the learner's request ("implement"), not hand-written.
 
 ## Open questions
 
