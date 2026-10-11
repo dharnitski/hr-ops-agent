@@ -92,6 +92,11 @@ calling the agent launch-ready, independent of what the CI gate can mechanically
   `adk eval` run, so a low-entropy model-generated key (or a case's hardcoded literal key,
   e.g. `demo-key-1`) can collide with what an earlier run already recorded, turning a
   should-succeed turn into a false `idempotency_conflict`.
+- **`HCM_REQUIRE_CONFIRMATION=false`** for every tier. Without it, any case that reaches a write
+  tool ends at the M6.2 confirmation pause (no model text, extra `adk_request_confirmation`
+  call) and never checks the server-side outcome. `adk eval` cannot answer a pause, so the
+  pause is covered by `tests/integration/hr_agent/test_pto_confirmation_live.py` instead.
+  Running a tier by hand needs the same variable on both the server and `adk eval`.
 - **Bounded retry (3 attempts, fresh server each time)**, gated on matching one of a fixed
   set of transient-failure markers (`oauth2.googleapis.com`, `Read timed out`, `Connection
   closed`) already documented as occasional, not agent bugs. A failure that doesn't match

@@ -216,6 +216,6 @@ cross-target comparison).
 
 OpenTelemetry traces to Cloud Trace; dashboard of task success, tool error rate, latency,
 cost per task. Model-tier routing (Flash vs. Pro — confirm current Gemini 3.x IDs) with
-measured savings. A failure drill with an RCA. Deliverables:
+measured savings (skipped 2026-10-07 to avoid billed runs; see `docs/PROGRESS.md`). A failure drill with an RCA. Deliverables:
 `docs/08-reference-architecture.md`, `docs/08-platform-strategy-memo.md` (12–24 months,
 build vs. buy), `docs/08-roi-cost-model.md`.

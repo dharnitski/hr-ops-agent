@@ -283,7 +283,14 @@
             }
           ]
         }
-      ]
+      ],
+      "session_input": {
+        "app_name": "hr_agent",
+        "user_id": "test_user_id",
+        "state": {
+          "caller_employee_id": "E1002"
+        }
+      }
     },
     {
       "eval_id": "adversarial_idempotency_replay_same_args",
@@ -419,7 +426,7 @@
             "role": "user",
             "parts": [
               {
-                "text": "Now use the same key, demo-key-2, but submit PTO for Bob Smith from 2026-10-01 to 2026-10-03 instead."
+                "text": "Now use the same key, demo-key-2, but submit PTO for E1002 from 2026-10-01 to 2026-10-03 instead."
               }
             ]
           },

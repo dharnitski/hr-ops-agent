@@ -43,7 +43,7 @@ as the soft layer over the hard ones.
 
 ## Risk the framework doesn't handle: access control
 
-ADK runs the tools; it does not decide who may see whose data. As of this module, any caller
+ADK runs the tools; it does not decide who may see whose data. As of this module (before M6.2), any caller
 can ask `get_pto_balance` for any employee ID, and `find_employee` will resolve any name. The
 "ambiguous means ask, don't pick" rule is prompt-enforced only.
 

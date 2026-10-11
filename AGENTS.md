@@ -3,7 +3,7 @@
 ## What this is
 An HR operations agent built on Google ADK. HCM tools are exposed via an MCP server
 (`mcp_server/`) and consumed by the agent (`hr_agent/`). Evaluated with `adk eval`
-(`evals/`) and deployed to Agent Engine, Cloud Run, or GKE (`deploy/`).
+(`evals/`) and deployed to Agent Engine, with `mcp_server` on Cloud Run (`deploy/`).
 
 ## Layout
 - `hr_agent/` — ADK agent package: definitions, prompts, orchestration. Single-agent
@@ -18,8 +18,9 @@ An HR operations agent built on Google ADK. HCM tools are exposed via an MCP ser
 - `tests/integration/` — tests that cross a real boundary: a running MCP server, the ADK
   agent wiring, or live model/GCP calls. May need `.env`/credentials; slower and
   non-deterministic. Mark model-calling tests `@pytest.mark.integration`.
-- `deploy/` — `agent_engine/`, `cloud_run/`, `gke/` configs, plus `terraform/` (project infra:
-  APIs, service accounts/IAM, Artifact Registry, `mcp-server` Cloud Run) (Module 7).
+- `deploy/` — `cloud_run/` (`mcp_server` image build), `terraform/` (project infra: APIs, service
+  accounts/IAM, Artifact Registry, `mcp-server` Cloud Run) (Module 7). `agent_engine/` and `gke/`
+  are empty placeholders: the agent deploys via `adk deploy`, GKE was skipped.
 - `docs/` — one-pagers, architecture doc, strategy memo.
 - `scratch/` — throwaway experiments (e.g. `react_from_scratch.py`); not imported by
   production code, not covered by CI.

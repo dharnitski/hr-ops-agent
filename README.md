@@ -2,7 +2,7 @@
 
 An HR operations agent built on [Google ADK](https://google.github.io/adk-docs/), with HCM
 (Human Capital Management) tools exposed as an MCP server, evaluated with `adk eval`, and
-deployable to Agent Engine, Cloud Run, or GKE.
+deployed to Agent Engine (the agent) with `mcp_server` on Cloud Run.
 
 ## Repo layout
 
@@ -12,7 +12,7 @@ hr-ops-agent/
 ├── mcp_server/          # HCM tools as an MCP server (Module 2)
 ├── evals/               # eval sets + configs for adk eval (Module 5)
 ├── tests/               # unit/ (hermetic, in CI) and integration/ (real boundaries, on demand)
-├── deploy/              # agent_engine/, cloud_run/, gke/, terraform/ (Module 7)
+├── deploy/              # cloud_run/ (mcp_server image), terraform/ (infra); agent_engine/, gke/ unused (Module 7)
 ├── docs/                # one-pagers, architecture doc, strategy memo
 ├── scratch/             # throwaway experiments: ReAct loop, Workflow probes, LangGraph router
 ├── .github/workflows/   # CI: lint, terraform fmt/validate, tests, eval gate
@@ -56,13 +56,16 @@ uv run adk run hr_agent              # or chat in the terminal
 to the `pto_agent`, `payroll_agent`, or `policy_agent` specialist (see
 [docs/03-architecture.md](docs/03-architecture.md)) and declines anything that matches none.
 
-Prompts to try (mock data: employees E1001–E1005, Bob Smith is E1002; payroll run PR-2026-09):
+Prompts to try (mock data: employees E1001–E1005, Bob Smith is E1002; payroll run PR-2026-09).
+Every HCM tool is self-only, so first tell the agent who you are (`I'm E1002`); it calls
+`identify_caller`, a demo stub rather than real auth (see docs/PROGRESS.md Open questions):
 
-- `How much PTO does E1002 have?` — `pto_agent`, local tool balance lookup.
-- `PTO for Bob Smith` — resolves the name with `find_employee`, then looks up the balance.
+- `How much PTO does E1002 have?` — `pto_agent`, `get_pto_balance` over MCP (self-only).
+- `PTO for Bob Smith` — should ask for an employee ID; name lookup was retired (Module 6.2).
 - `Who is employee E1002?` — `get_employee` over MCP.
 - `Submit PTO for E1002 from 2026-10-12 to 2026-10-14.` — `submit_pto_request` over MCP;
-  expect a pending request with server-computed hours.
+  pauses for your confirmation (Module 6.2), then returns a pending request with
+  server-computed hours.
 - `Submit PTO for E1002 from 2026-10-14 to 2026-10-12.` — expect a plain error about dates.
 - `Submit PTO for E1002 from 2026-10-05 to 2026-11-02.` — 21 working days, over the 160h
   blast-radius cap (Module 6.4); expect `exceeds_limit` regardless of balance.
@@ -90,7 +93,12 @@ uv run pytest tests/integration     # integration tests (need hr_agent/.env)
 uv run adk eval hr_agent evals/happy_path/hr_ops_happy_path.evalset.json
 uv run adk eval hr_agent evals/ambiguous/hr_ops_ambiguous.evalset.json
 uv run adk eval hr_agent evals/adversarial/hr_ops_adversarial.evalset.json
+# hcm_down runs with no MCP server; scripts/run_eval_gate.py handles all four tiers
+uv run python scripts/run_eval_gate.py
 ```
+
+Deploy and teardown commands: [docs/07-deployment-procedure.md](docs/07-deployment-procedure.md).
+Infra: `deploy/terraform/` (see its README).
 
 ## Scratch
 
