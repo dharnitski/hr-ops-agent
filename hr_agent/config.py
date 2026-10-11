@@ -24,3 +24,8 @@ HCM_MCP_URL = os.environ.get("HCM_MCP_URL", DEFAULT_HCM_MCP_URL)
 # (hr_agent/toolsets.py); never leave this literally set to an empty string in a real
 # deploy's env file (Agent Engine's deploy API hard-fails on empty-valued vars -- M7.1).
 HCM_MCP_AUDIENCE = os.environ.get("HCM_MCP_AUDIENCE", "")
+
+# Human confirmation before HCM writes (M6.2). On unless set to exactly "false"; only
+# scripts/run_eval_gate.py sets it, so eval cases can reach the server-side outcome of a write
+# instead of ending at the pause. Never set it in .env or a deployed env file.
+REQUIRE_WRITE_CONFIRMATION = os.environ.get("HCM_REQUIRE_CONFIRMATION", "true").lower() != "false"

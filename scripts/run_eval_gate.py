@@ -64,7 +64,11 @@ def _stop_server(proc: subprocess.Popen[bytes]) -> None:
 
 def run_tier(evalset: Path) -> bool:
     hcm_down = evalset.parent.name in NO_SERVER_TIERS
-    env = {**os.environ, "HCM_MCP_URL": DEAD_MCP_URL} if hcm_down else None
+    # Writes would otherwise stop at the M6.2 confirmation pause, hiding the server-side
+    # outcome the cases check; the pause itself is covered by test_pto_confirmation_live.py.
+    env = {**os.environ, "HCM_REQUIRE_CONFIRMATION": "false"}
+    if hcm_down:
+        env["HCM_MCP_URL"] = DEAD_MCP_URL
     for attempt in range(1, MAX_ATTEMPTS + 1):
         server = None if hcm_down else _start_server()
         try:

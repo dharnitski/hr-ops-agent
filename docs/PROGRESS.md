@@ -61,9 +61,13 @@ unchecked step.
       only (2026-09-29 scope decision, see Decisions)
 - [x] 3. ~~Deploy to GKE (`adk deploy gke`)~~ — skipped, same decision
 - [x] 4. Least-privilege service account, Secret Manager
-- [x] 5. CI/CD with eval gate, staging then prod
-- [x] 6. Compare with Agent Starter Pack layout
-- [x] 7. Tear down unused resources
+- [ ] 5. CI/CD with eval gate, staging then prod -- partial: manual `workflow_dispatch` eval gate
+      exists but has never run live (no WIF credentials); one environment, no deploy pipeline
+- [ ] 6. Compare with Agent Starter Pack layout -- partial: `deploy/terraform/` is modeled on
+      ASP's layout, but the comparison is not written down (`docs/07-deployment-tradeoffs.md`
+      doesn't mention ASP)
+- [ ] 7. Tear down unused resources -- deferred on purpose: Agent Engine, `mcp-server` and the
+      Artifact Registry image still run; commands in `docs/07-deployment-procedure.md`
 - [x] 8. `docs/07-deployment-tradeoffs.md` (scoped to Agent Engine only) -- distinct from
       `docs/07-deployment-procedure.md` (added 2026-09-29): that one's the how-to-redeploy
       runbook; this one's the why-Agent-Engine analysis.
@@ -806,6 +810,29 @@ been cut; see git history for the blow-by-blow if needed.
   build and maintenance cost are assumptions. Agent Engine runtime rates could not be
   verified against the official page (third-party sources disagree), so runtime is given as an
   upper bound and flagged. Module 8 checklist is complete.
+
+- **Checklist audit (2026-10-10):** M7.5-M7.7 were checked off but not met, so they are
+  unchecked with the gap noted; resume there. M8.3 stays skipped by decision. README, AGENTS.md
+  and `docs/01` were refreshed for retired `find_employee`, skipped Cloud Run/GKE agent
+  deploys and the confirmation pause. `test_submit_pto_sends_idempotency_key` fixed (no text
+  assertion; passes live, 3 of 3 in `test_agent_mcp_live.py`).
+  **Live adversarial run found the eval write cases broken by M6.2** (3 passed, 5 failed): every
+  case that reaches `submit_pto_request` now ends at the confirmation pause (final response is
+  ADK's "requires confirmation" function response, no model text), so the server-side outcome
+  the case exists to check (invalid dates, no working days, malformed ID, idempotency
+  replay/conflict) never runs, and the trajectory gains an `adk_request_confirmation` call. The
+  five salary/injection cases passed. `happy_submit_pto_request_by_id` has the same shape and
+  was not run. Seeding `caller_employee_id` on the malformed-ID case was correct but not
+  sufficient.
+  **Fixed:** `HCM_REQUIRE_CONFIRMATION` (`hr_agent/config.py`, on unless exactly `false`) feeds
+  both write toolsets; only `scripts/run_eval_gate.py` sets it to `false`, so eval cases reach
+  the server outcome while the pause stays covered by `test_pto_confirmation_live.py`. The
+  conflict case still said "Bob Smith" (a `find_employee`-era premise); the model picked another
+  ID and got `forbidden`, so it now uses E1002 with different dates. Live: adversarial 8 of 8,
+  `happy_submit_pto_request_by_id` passes (happy_path 14 and ambiguous 6 not re-run, none write).
+  Observed: asked to submit for "Bob Smith", the model guessed an ID despite the never-guess
+  rule; the server's self-only check blocked it (soft rule failed, hard layer held). One replay
+  turn also hit an MCP "connection error" once, not reproduced on re-run.
 
 ## Open questions
 

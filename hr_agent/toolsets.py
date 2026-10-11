@@ -6,7 +6,7 @@ from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
 from google.adk.tools.mcp_tool.mcp_toolset import McpToolset
 
-from .config import HCM_MCP_AUDIENCE, HCM_MCP_URL
+from .config import HCM_MCP_AUDIENCE, HCM_MCP_URL, REQUIRE_WRITE_CONFIRMATION
 
 # Params are shared; each toolset still opens its own MCP session (one extra connection per
 # specialist is the price of independent tool_filters).
@@ -73,7 +73,7 @@ pto_write_toolset = McpToolset(
     connection_params=_hcm_connection,
     tool_filter=["submit_pto_request"],
     header_provider=_caller_headers,
-    require_confirmation=True,
+    require_confirmation=REQUIRE_WRITE_CONFIRMATION,
 )
 
 # Read-only. tool_filter is a soft, in-process boundary; the hard one is server-side
@@ -94,5 +94,5 @@ payroll_write_toolset = McpToolset(
     connection_params=_hcm_connection,
     tool_filter=["approve_payroll_run"],
     header_provider=_caller_headers,
-    require_confirmation=True,
+    require_confirmation=REQUIRE_WRITE_CONFIRMATION,
 )
